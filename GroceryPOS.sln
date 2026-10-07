@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{AB80519D-9C07-42C2-8D40-2163A143D591}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GroceryPOS.Domain", "src\GroceryPOS.Domain\GroceryPOS.Domain.csproj", "{12FFFE02-0803-4815-AA85-5CAF10FB18A2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GroceryPOS.Application", "src\GroceryPOS.Application\GroceryPOS.Application.csproj", "{8FACE940-6C0B-45A4-B4F5-F437CC666B71}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{12FFFE02-0803-4815-AA85-5CAF10FB18A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{12FFFE02-0803-4815-AA85-5CAF10FB18A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{12FFFE02-0803-4815-AA85-5CAF10FB18A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{12FFFE02-0803-4815-AA85-5CAF10FB18A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8FACE940-6C0B-45A4-B4F5-F437CC666B71}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8FACE940-6C0B-45A4-B4F5-F437CC666B71}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8FACE940-6C0B-45A4-B4F5-F437CC666B71}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8FACE940-6C0B-45A4-B4F5-F437CC666B71}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{12FFFE02-0803-4815-AA85-5CAF10FB18A2} = {AB80519D-9C07-42C2-8D40-2163A143D591}
+		{8FACE940-6C0B-45A4-B4F5-F437CC666B71} = {AB80519D-9C07-42C2-8D40-2163A143D591}
+	EndGlobalSection
+EndGlobal
