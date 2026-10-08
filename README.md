@@ -14,7 +14,10 @@ src/
   GroceryPOS.Infrastructure  EF Core 8 (SQLite / SQL Server), repositories, BCrypt, Serilog   (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
-tests/                       xUnit tests for Domain and Application                            (planned)
+tests/
+  GroceryPOS.Testing         Dependency-free xUnit-compatible harness (temporary, see below)
+  GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales)
+  GroceryPOS.Application.Tests  Application tests (auth, formatting, Result)
 ```
 
 Conventions:
@@ -29,7 +32,15 @@ Requirements: .NET 8 SDK (the WinForms app will require Windows to run).
 
 ```bash
 dotnet build GroceryPOS.sln
+
+# Run tests (each test project is a small console runner; optional name filter as last arg)
+dotnet run --project tests/GroceryPOS.Domain.Tests
+dotnet run --project tests/GroceryPOS.Application.Tests -- AuthService
 ```
+
+Tests use `[Fact]` / `[Theory]` / `Assert` from namespace `Xunit`, served by the in-repo harness
+`tests/GroceryPOS.Testing` because the CI sandbox cannot reach nuget.org yet. Moving to real xUnit
+only requires swapping the project reference for the xunit packages and deleting each `Program.cs`.
 
 ## Default account
 

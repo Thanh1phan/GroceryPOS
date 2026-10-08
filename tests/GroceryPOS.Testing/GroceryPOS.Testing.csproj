@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Minimal, dependency-free test harness exposing an xUnit-compatible surface (namespace Xunit:
+    [Fact], [Theory], [InlineData], Assert.*). It exists because the build sandbox cannot reach nuget.org.
+    To switch to real xUnit: replace this ProjectReference with xunit + xunit.runner.visualstudio +
+    Microsoft.NET.Test.Sdk, set OutputType back to Library and delete each test project's Program.cs.
+    Test files need no changes.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>GroceryPOS.Testing</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+</Project>

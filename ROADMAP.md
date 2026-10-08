@@ -11,7 +11,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Domain: audit log entity + action keys
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
-- [ ] Test projects (xUnit) for Domain and Application – *blocked: nuget.org unreachable from the build sandbox*
+- [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -41,7 +42,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] Customers CRUD + loyalty points history
 
 ## M5 – Point of sale
-- [ ] Sale/SaleLine domain (discounts per line and per invoice, VAT split, payments)
+- [x] Sale/SaleLine domain (discounts per line and per invoice, VAT split, payments)
+- [ ] Checkout use case (invoice numbering, stock deduction, loyalty earn/redeem, audit) + `ISaleRepository`
 - [ ] POS screen: barcode scan, quick search, cart, discounts, cash/transfer, change calculation
 - [ ] Loyalty earn/redeem at checkout
 - [ ] Receipt print preview (80mm)
