@@ -56,4 +56,19 @@ public class CustomerTests
         Assert.Equal(0, customer.LoyaltyPoints);
         Assert.Equal(0m, customer.TotalSpent);
     }
+
+    [Fact]
+    public void ReverseSale_removes_earned_points_and_refunds_redeemed_points()
+    {
+        var customer = new Customer("kh002", "Phạm Thị D");
+        customer.RecordPurchase(300_000m, LoyaltyPolicy.Default); // 30 points
+        customer.RedeemPoints(20, LoyaltyPolicy.Default);         // 10 left
+        customer.RecordPurchase(120_000m, LoyaltyPolicy.Default); // +12 → 22
+
+        customer.ReverseSale(120_000m, pointsEarned: 12, pointsRedeemed: 20);
+
+        Assert.Equal(30, customer.LoyaltyPoints);
+        Assert.Equal(300_000m, customer.TotalSpent);
+        Assert.Throws<DomainException>(() => customer.ReverseSale(0, -1, 0));
+    }
 }

@@ -66,6 +66,21 @@ public sealed class Customer : AuditableEntity
         LoyaltyPoints = Math.Max(0, LoyaltyPoints - policy.PointsFor(refundedAmount));
     }
 
+    /// <summary>
+    /// Undoes a voided sale exactly: removes the spend and the points it earned, and gives back
+    /// the points that were redeemed on it. The balance never drops below zero.
+    /// </summary>
+    public void ReverseSale(decimal paidAmount, int pointsEarned, int pointsRedeemed)
+    {
+        if (pointsEarned < 0 || pointsRedeemed < 0)
+        {
+            throw new DomainException("customer.points", "Số điểm không hợp lệ.");
+        }
+
+        TotalSpent = Math.Max(0, TotalSpent - Math.Max(0, paidAmount));
+        LoyaltyPoints = Math.Max(0, LoyaltyPoints - pointsEarned) + pointsRedeemed;
+    }
+
     public void Activate() => IsActive = true;
 
     public void Deactivate() => IsActive = false;

@@ -10,7 +10,7 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases, DTOs, interfaces, Result pattern
+  GroceryPOS.Application     Use cases (auth, checkout/void, POS lookup), DTOs, interfaces, Result pattern
   GroceryPOS.Infrastructure  EF Core 8 (SQLite / SQL Server), repositories, BCrypt, Serilog   (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
@@ -36,6 +36,12 @@ dotnet build GroceryPOS.sln
 # Run tests (each test project is a small console runner; optional name filter as last arg)
 dotnet run --project tests/GroceryPOS.Domain.Tests
 dotnet run --project tests/GroceryPOS.Application.Tests -- AuthService
+```
+
+If nuget.org is unreachable (offline sandbox), build with an empty local feed – the projects have no package dependencies yet:
+
+```bash
+mkdir -p /tmp/emptyfeed && dotnet build GroceryPOS.sln -p:RestoreSources=/tmp/emptyfeed
 ```
 
 Tests use `[Fact]` / `[Theory]` / `Assert` from namespace `Xunit`, served by the in-repo harness
