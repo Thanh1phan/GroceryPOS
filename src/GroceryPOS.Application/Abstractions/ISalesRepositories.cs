@@ -16,6 +16,9 @@ public interface IProductRepository : IRepository<Product>
 
     /// <summary>Active products whose name, code or barcode contains <paramref name="term"/>.</summary>
     Task<IReadOnlyList<Product>> SearchAsync(string term, int take, CancellationToken cancellationToken = default);
+
+    /// <summary>Active products whose stock is at or below their minimum level.</summary>
+    Task<IReadOnlyList<Product>> ListLowStockAsync(CancellationToken cancellationToken = default);
 }
 
 public interface ICustomerRepository : IRepository<Customer>

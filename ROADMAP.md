@@ -12,7 +12,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-09)*
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-10)*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -53,9 +53,10 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 
 ## M6 – Inventory & purchasing
 - [ ] Purchase orders & goods receipt (updates cost price & stock)
-- [ ] Stock adjustments with reason + audit
-- [ ] Stock movement ledger
-- [ ] Low-stock alerts
+- [x] Stock adjustments with reason + audit, and stock counts (kiểm kê) with variance value (application layer; UI pending)
+- [x] Stock movement ledger (`StockMovement`, written by checkout/void/adjust/count) + stock card query with opening/closing balance
+- [x] Low-stock alerts query (out-of-stock first, shortage to minimum; UI pending)
+- [ ] Inventory screens: adjustment dialog, stock count sheet, stock card, low-stock list
 
 ## M7 – Reports & dashboard
 - [ ] Daily revenue, best sellers, inventory value, profit

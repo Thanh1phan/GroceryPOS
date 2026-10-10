@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-10
+- Added the stock ledger (`Domain.Inventory.StockMovement`, thẻ kho): every stock change records type, signed quantity, balance after, unit cost, reference code and user; movement types enforce their direction and adjustment reasons (hư hỏng, hết hạn, mất mát, dùng nội bộ, phát hiện thừa, sửa sai...) enforce theirs.
+- Checkout and void now write `Sale` / `SaleVoid` ledger entries referencing the invoice code (`CheckoutService` takes an `IStockMovementRepository`).
+- Added `InventoryService`: manual adjustment (`inventory.adjust`, never below zero, audited with before/after and cost value), stock count `KK{yyMMdd-HHmmss}` that sets counted quantities and reports shortage/surplus value, stock card for a period with opening/closing balance, and low-stock list (`inventory.view`).
+- 28 new tests (Domain 85, Application 63 – all passing).
+
 ## 2026-10-09
 - Added the POS checkout use case (`Application.Sales.CheckoutService`): permission checks (`sales.create`, `sales.discount`), daily invoice numbers `HD{yyMMdd}-{0001}` in store time (UTC+7), line/invoice discounts, split payments, stock deduction (negative stock configurable via `SalesOptions`), loyalty redeem/earn, low-stock alerts on the receipt, audit entry. All checks run before any entity is touched, so a failed checkout leaves nothing half-applied.
 - Added void sale (`sales.void`): returns stock, reverses spend/earned points and refunds redeemed points (`Customer.ReverseSale`), audited with reason.

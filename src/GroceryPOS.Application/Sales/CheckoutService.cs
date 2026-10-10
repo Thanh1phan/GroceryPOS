@@ -7,6 +7,7 @@ using GroceryPOS.Domain.Auditing;
 using GroceryPOS.Domain.Catalog;
 using GroceryPOS.Domain.Common;
 using GroceryPOS.Domain.Identity;
+using GroceryPOS.Domain.Inventory;
 using GroceryPOS.Domain.Partners;
 using GroceryPOS.Domain.Sales;
 
@@ -29,6 +30,7 @@ public sealed class CheckoutService : ICheckoutService
 {
     private readonly ISaleRepository _sales;
     private readonly IProductRepository _products;
+    private readonly IStockMovementRepository _movements;
     private readonly ICustomerRepository _customers;
     private readonly IInvoiceNumberGenerator _invoiceNumbers;
     private readonly IUnitOfWork _unitOfWork;
@@ -40,6 +42,7 @@ public sealed class CheckoutService : ICheckoutService
     public CheckoutService(
         ISaleRepository sales,
         IProductRepository products,
+        IStockMovementRepository movements,
         ICustomerRepository customers,
         IInvoiceNumberGenerator invoiceNumbers,
         IUnitOfWork unitOfWork,
@@ -50,6 +53,7 @@ public sealed class CheckoutService : ICheckoutService
     {
         _sales = sales;
         _products = products;
+        _movements = movements;
         _customers = customers;
         _invoiceNumbers = invoiceNumbers;
         _unitOfWork = unitOfWork;
@@ -121,7 +125,8 @@ public sealed class CheckoutService : ICheckoutService
         // Everything below is guaranteed to succeed: apply side effects.
         foreach (var (productId, quantity) in QuantitiesByProduct(sale))
         {
-            products[productId].AdjustStock(-quantity, allowNegative: true);
+            _movements.Add(StockMovement.Apply(
+                products[productId], StockMovementType.Sale, -quantity, now, session.UserId, sale.Code, allowNegative: true));
         }
 
         if (customer is not null)
@@ -177,9 +182,10 @@ public sealed class CheckoutService : ICheckoutService
             return SaleErrors.SaleNotFound;
         }
 
+        var now = _clock.GetUtcNow();
         try
         {
-            sale.Void(_clock.GetUtcNow(), session.UserId, reason);
+            sale.Void(now, session.UserId, reason);
         }
         catch (DomainException ex)
         {
@@ -193,7 +199,8 @@ public sealed class CheckoutService : ICheckoutService
             // A product deleted since the sale simply gets no stock back.
             if (products.TryGetValue(productId, out var product))
             {
-                product.AdjustStock(quantity, allowNegative: true);
+                _movements.Add(StockMovement.Apply(
+                    product, StockMovementType.SaleVoid, quantity, now, session.UserId, sale.Code, allowNegative: true));
             }
         }
 

@@ -1,6 +1,7 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Domain.Catalog;
 using GroceryPOS.Domain.Common;
+using GroceryPOS.Domain.Inventory;
 using GroceryPOS.Domain.Partners;
 using GroceryPOS.Domain.Sales;
 
@@ -52,6 +53,25 @@ internal sealed class InMemoryProductRepository : InMemoryRepository<Product>, I
                 || p.Code.Contains(term, StringComparison.OrdinalIgnoreCase)
                 || (p.Barcode?.Contains(term) ?? false))
             .Take(take)
+            .ToList());
+
+    public Task<IReadOnlyList<Product>> ListLowStockAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Product>>(Items.Where(p => p.IsActive && p.IsLowStock).ToList());
+}
+
+internal sealed class InMemoryStockMovementRepository : InMemoryRepository<StockMovement>, IStockMovementRepository
+{
+    public Task<IReadOnlyList<StockMovement>> ListByProductAsync(
+        int productId,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<StockMovement>>(Items
+            .Where(m => m.ProductId == productId
+                && (from is null || m.Timestamp >= from)
+                && (to is null || m.Timestamp < to))
+            .OrderBy(m => m.Timestamp)
+            .ThenBy(m => m.Id)
             .ToList());
 }
 

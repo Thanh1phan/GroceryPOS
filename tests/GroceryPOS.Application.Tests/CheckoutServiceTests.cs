@@ -5,6 +5,7 @@ using GroceryPOS.Application.Tests.Fakes;
 using GroceryPOS.Domain.Auditing;
 using GroceryPOS.Domain.Catalog;
 using GroceryPOS.Domain.Identity;
+using GroceryPOS.Domain.Inventory;
 using GroceryPOS.Domain.Partners;
 using GroceryPOS.Domain.Sales;
 
@@ -15,6 +16,7 @@ public class CheckoutServiceTests
     private readonly InMemorySaleRepository _sales = new();
     private readonly InMemoryProductRepository _products = new();
     private readonly InMemoryCustomerRepository _customers = new();
+    private readonly InMemoryStockMovementRepository _movements = new();
     private readonly FakeUnitOfWork _uow = new();
     private readonly UserSessionStore _session = new();
     private readonly RecordingAuditService _audit = new();
@@ -42,7 +44,7 @@ public class CheckoutServiceTests
     }
 
     private CheckoutService CreateSut(SalesOptions? options = null) =>
-        new(_sales, _products, _customers, new InvoiceNumberGenerator(_sales, options), _uow, _session, _audit, _clock, options);
+        new(_sales, _products, _movements, _customers, new InvoiceNumberGenerator(_sales, options), _uow, _session, _audit, _clock, options);
 
     private void SignIn(params string[] permissions) =>
         _session.SignIn(new UserSession(7, "thungan", "Trần Thị B", SystemRoles.Cashier, permissions.ToHashSet(), _clock.Now));
@@ -302,5 +304,38 @@ public class CheckoutServiceTests
         Assert.True(ok.IsSuccess);
         Assert.Equal("sale.void", twice.Error.Code);
         Assert.Equal(100m, _noodles.StockQuantity);
+    }
+
+    [Fact]
+    public async Task Checkout_and_void_write_stock_ledger_entries()
+    {
+        SignIn(Permissions.SalesCreate, Permissions.SalesVoid);
+        var sut = CreateSut();
+        var receipt = (await sut.CheckoutAsync(Cash(200_000, new CheckoutLine(_milk.Id, 2), new CheckoutLine(_milk.Id, 1)))).Value;
+
+        var sold = Assert.Single(_movements.All);
+        Assert.Equal(StockMovementType.Sale, sold.Type);
+        Assert.Equal(-3m, sold.Quantity);
+        Assert.Equal(17m, sold.BalanceAfter);
+        Assert.Equal(receipt.Code, sold.ReferenceCode);
+        Assert.Equal(7, sold.UserId);
+
+        await sut.VoidAsync(receipt.SaleId, "Nhầm hàng");
+
+        Assert.Equal(2, _movements.All.Count);
+        var voided = _movements.All[1];
+        Assert.Equal(StockMovementType.SaleVoid, voided.Type);
+        Assert.Equal(3m, voided.Quantity);
+        Assert.Equal(_milk.StockQuantity, voided.BalanceAfter);
+    }
+
+    [Fact]
+    public async Task Failed_checkout_writes_no_ledger_entries()
+    {
+        var result = await CreateSut(SalesOptions.Default with { AllowNegativeStock = false })
+            .CheckoutAsync(Cash(10_000_000, new CheckoutLine(_noodles.Id, 1), new CheckoutLine(_milk.Id, 50)));
+
+        Assert.True(result.IsFailure);
+        Assert.Empty(_movements.All);
     }
 }
