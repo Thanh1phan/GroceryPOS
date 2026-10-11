@@ -44,4 +44,6 @@ public static class AuditActions
     public const string PriceChanged = "product.price_changed";
     public const string StockAdjusted = "inventory.adjusted";
     public const string StockCounted = "inventory.counted";
+    public const string GoodsReceived = "purchase.received";
+    public const string GoodsReceiptCancelled = "purchase.cancelled";
 }

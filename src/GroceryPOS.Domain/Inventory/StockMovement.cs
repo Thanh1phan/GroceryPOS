@@ -25,14 +25,15 @@ public sealed class StockMovement : Entity
         int? userId,
         string? referenceCode,
         StockAdjustmentReason? reason,
-        string? note)
+        string? note,
+        decimal? unitCost)
     {
         ProductId = product.Id;
         Product = product;
         Type = type;
         Quantity = quantity;
         BalanceAfter = product.StockQuantity;
-        UnitCost = product.CostPrice;
+        UnitCost = unitCost ?? product.CostPrice;
         Timestamp = timestamp;
         UserId = userId;
         ReferenceCode = Guard.Optional(referenceCode, 32);
@@ -73,7 +74,8 @@ public sealed class StockMovement : Entity
 
     /// <summary>
     /// Changes the product's stock by <paramref name="quantity"/> and returns the ledger entry describing it.
-    /// The caller adds the movement to the unit of work.
+    /// The caller adds the movement to the unit of work. <paramref name="unitCost"/> overrides the product's
+    /// cost price on the entry (goods receipts record the purchase cost of the batch).
     /// </summary>
     public static StockMovement Apply(
         Product product,
@@ -84,7 +86,8 @@ public sealed class StockMovement : Entity
         string? referenceCode = null,
         StockAdjustmentReason? reason = null,
         string? note = null,
-        bool allowNegative = false)
+        bool allowNegative = false,
+        decimal? unitCost = null)
     {
         ArgumentNullException.ThrowIfNull(product);
         quantity = Math.Round(quantity, QuantityDecimals, MidpointRounding.AwayFromZero);
@@ -118,8 +121,13 @@ public sealed class StockMovement : Entity
             }
         }
 
+        if (unitCost is < 0)
+        {
+            throw new DomainException("stock.cost", "Giá vốn không được âm.");
+        }
+
         product.AdjustStock(quantity, allowNegative);
-        return new StockMovement(product, type, quantity, timestamp, userId, referenceCode, reason, note);
+        return new StockMovement(product, type, quantity, timestamp, userId, referenceCode, reason, note, unitCost);
     }
 
     private static void EnsureDirection(StockMovementType type, decimal quantity)

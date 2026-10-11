@@ -102,6 +102,24 @@ public static class Assert
         return list[0];
     }
 
+    public static void All<T>(IEnumerable<T> collection, Action<T> action)
+    {
+        var index = 0;
+        foreach (var item in collection)
+        {
+            try
+            {
+                action(item);
+            }
+            catch (AssertException ex)
+            {
+                throw new AssertException($"Assert.All() failure at item [{index}]: {ex.Message}");
+            }
+
+            index++;
+        }
+    }
+
     public static void Contains<T>(T expected, IEnumerable<T> collection)
     {
         if (!collection.Contains(expected))

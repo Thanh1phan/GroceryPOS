@@ -12,7 +12,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-10)*
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-11)*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -52,7 +52,10 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] Shifts: open/close, cash drawer count & variance
 
 ## M6 – Inventory & purchasing
-- [ ] Purchase orders & goods receipt (updates cost price & stock)
+- [x] Goods receipt (phiếu nhập `PN{yyMMdd}-{0001}`): draft → complete/cancel, line + receipt discounts, moving weighted-average cost, optional new sell price, supplier debt, ledger + audit (application layer; UI pending)
+- [x] Reorder suggestions from low-stock products (refill to 2× minimum)
+- [ ] Supplier payments (trả nợ NCC) and supplier returns (trả hàng NCC)
+- [ ] Goods receipt screens: receipt list, receipt editor with barcode scan, completion summary (below-cost warnings)
 - [x] Stock adjustments with reason + audit, and stock counts (kiểm kê) with variance value (application layer; UI pending)
 - [x] Stock movement ledger (`StockMovement`, written by checkout/void/adjust/count) + stock card query with opening/closing balance
 - [x] Low-stock alerts query (out-of-stock first, shortage to minimum; UI pending)

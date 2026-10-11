@@ -82,6 +82,26 @@ public sealed class Product : AuditableEntity
         return change;
     }
 
+    /// <summary>
+    /// Updates <see cref="CostPrice"/> to the moving weighted average after receiving
+    /// <paramref name="quantity"/> units at <paramref name="unitCost"/> (giá vốn bình quân gia quyền).
+    /// Must be called before the received quantity is added to stock. When the current stock is zero or
+    /// negative, the new cost is simply the purchase cost. Returns the price change for auditing.
+    /// </summary>
+    public PriceChange ApplyPurchaseCost(decimal quantity, decimal unitCost)
+    {
+        if (quantity <= 0)
+        {
+            throw new DomainException("product.cost", "Số lượng nhập phải lớn hơn 0.");
+        }
+
+        Guard.NotNegative(unitCost, "product.cost", "Giá nhập không được âm.");
+        var newCost = StockQuantity <= 0
+            ? unitCost
+            : Math.Round(((StockQuantity * CostPrice) + (quantity * unitCost)) / (StockQuantity + quantity), 0, MidpointRounding.AwayFromZero);
+        return ChangePrices(newCost, SellPrice);
+    }
+
     public void ChangeVatRate(decimal vatRate)
     {
         if (!Catalog.VatRate.IsAllowed(vatRate))
