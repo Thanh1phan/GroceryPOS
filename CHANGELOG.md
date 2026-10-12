@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-12
+- Added customer returns (`Domain.Sales.SaleReturn`, phiếu trả hàng `TH{yyMMdd}-{0001}`): several partial returns per invoice, each line refunding its share of the final amount after line/invoice/points discounts (the last units refund exactly what is left); per-line restock or write-off (hư hỏng) with cost values; earned points reversed in proportion to the refunded share, redeemed points given back only when the whole invoice is returned. All rules are checked before the sale is touched.
+- `SaleLine` tracks `ReturnedQuantity` / `RefundedAmount`; `Sale` exposes `RefundedTotal`, `NetTotal`, `IsFullyReturned`, and refuses `Void` once it has returns (it would restock twice).
+- Added `ReturnService` (`returns.create`): load an invoice by code with remaining quantities, create a return (`CustomerReturn` ledger entries at the sale's cost, customer spend/points, audit `sale.returned`), list returns of an invoice. Returns older than `SalesOptions.ReturnWindowDays` (7 store days) need `sales.void`.
+- 27 new tests (Domain 113, Application 90 – all passing).
+
 ## 2026-10-11
 - Added the purchasing domain (`Domain.Purchasing.GoodsReceipt`, phiếu nhập hàng): draft lines with quantity, supplier price, line discount and optional new shelf price; receipt-level discount allocated exactly to lines (largest remainder) to get each line's landed cost; paid amount vs. debt. Completing checks every rule first, then moves each product's cost to the moving weighted average (`Product.ApplyPurchaseCost`), applies new shelf prices and writes `GoodsReceipt` ledger entries at the landed cost.
 - Added `GoodsReceiptService` (`purchases.manage`): save/rewrite draft, complete (supplier debt via `Supplier.AddDebt`, price-change and receipt audit entries, below-cost warnings), cancel draft, get, search by period/supplier/status, and reorder suggestions from low-stock products.

@@ -41,6 +41,7 @@ public static class AuditActions
     public const string PasswordReset = "auth.password_reset";
     public const string SaleCompleted = "sale.completed";
     public const string SaleVoided = "sale.voided";
+    public const string SaleReturned = "sale.returned";
     public const string PriceChanged = "product.price_changed";
     public const string StockAdjusted = "inventory.adjusted";
     public const string StockCounted = "inventory.counted";

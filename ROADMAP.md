@@ -12,7 +12,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-11)*
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-12)*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -48,7 +48,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] POS screen: barcode scan, quick search, cart, discounts, cash/transfer, change calculation
 - [x] Loyalty earn/redeem at checkout (application layer; POS UI pending)
 - [ ] Receipt print preview (80mm)
-- [ ] Returns
+- [x] Customer returns (phiếu trả `TH{yyMMdd}-{0001}`): partial/multiple returns per invoice, discount-aware refunds, restock or write-off, proportional loyalty reversal, return window (7 days; older needs `sales.void`), audit (application layer; UI pending)
+- [ ] Returns screen: scan invoice, pick quantities, restock/write-off toggle, refund slip
 - [ ] Shifts: open/close, cash drawer count & variance
 
 ## M6 – Inventory & purchasing

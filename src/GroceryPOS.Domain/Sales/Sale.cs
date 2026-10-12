@@ -55,6 +55,12 @@ public sealed class Sale : AuditableEntity
     public int? VoidedBy { get; private set; }
     public string? VoidReason { get; private set; }
 
+    /// <summary>Points earned on this sale that have since been taken back by customer returns.</summary>
+    public int PointsReversed { get; private set; }
+
+    /// <summary>True once redeemed points were given back because the whole invoice was returned.</summary>
+    public bool RedeemedPointsRestored { get; private set; }
+
     public IReadOnlyList<SaleLine> Lines => _lines;
     public IReadOnlyList<Payment> Payments => _payments;
 
@@ -87,6 +93,16 @@ public sealed class Sale : AuditableEntity
 
     /// <summary>Tiền thừa trả khách – change is only ever given back in cash.</summary>
     public decimal ChangeDue => Math.Max(0, AmountPaid - Total);
+
+    /// <summary>Total refunded through customer returns.</summary>
+    public decimal RefundedTotal => _lines.Sum(l => l.RefundedAmount);
+
+    public bool HasReturns => _lines.Any(l => l.ReturnedQuantity > 0);
+
+    public bool IsFullyReturned => _lines.Count > 0 && _lines.All(l => l.IsFullyReturned);
+
+    /// <summary>Revenue kept after returns.</summary>
+    public decimal NetTotal => Total - RefundedTotal;
 
     public decimal VatTotal => _lines.Sum(l => l.VatAmount);
     public decimal CostTotal => _lines.Sum(l => l.CostAmount);
@@ -276,10 +292,71 @@ public sealed class Sale : AuditableEntity
             throw new DomainException("sale.void", "Chỉ có thể hủy hóa đơn đã hoàn tất.");
         }
 
+        if (HasReturns)
+        {
+            // Voiding would restock and refund the already returned goods a second time.
+            throw new DomainException("sale.void", "Hóa đơn đã có phiếu trả hàng, không thể hủy. Vui lòng lập phiếu trả cho phần còn lại.");
+        }
+
         VoidReason = Guard.NotEmpty(reason, "sale.void_reason", "Vui lòng nhập lý do hủy hóa đơn", 500);
         VoidedBy = userId;
         VoidedAt = now;
         Status = SaleStatus.Voided;
+    }
+
+    /// <summary>
+    /// Records returned quantities (see <see cref="SaleReturn.Create"/>) and works out the loyalty effect:
+    /// earned points are taken back in proportion to the refunded share of the total, and redeemed points
+    /// are given back only when the whole invoice has been returned.
+    /// </summary>
+    internal (IReadOnlyList<decimal> Refunds, int PointsReversed, int PointsRestored) RegisterReturn(
+        IReadOnlyList<(SaleLine Line, decimal Quantity)> items)
+    {
+        if (Status != SaleStatus.Completed)
+        {
+            throw new DomainException(
+                "return.sale",
+                Status == SaleStatus.Voided ? "Hóa đơn đã bị hủy, không thể trả hàng." : "Hóa đơn chưa hoàn tất.");
+        }
+
+        if (items.Count == 0)
+        {
+            throw new DomainException("return.empty", "Vui lòng chọn sản phẩm cần trả.");
+        }
+
+        // Check every item before touching any line, so a rejected return changes nothing.
+        foreach (var (line, _) in items)
+        {
+            EnsureOwned(line);
+        }
+
+        if (items.GroupBy(i => i.Line).FirstOrDefault(g => g.Count() > 1) is { } duplicate)
+        {
+            throw new DomainException("return.duplicate", $"\"{duplicate.Key.ProductName}\" bị chọn trả nhiều lần.");
+        }
+
+        foreach (var (line, quantity) in items)
+        {
+            line.EnsureReturnable(quantity);
+        }
+
+        var refunds = items.Select(i => i.Line.RegisterReturn(i.Quantity)).ToList();
+
+        var fullyReturned = IsFullyReturned;
+        var targetReversed = fullyReturned || Total == 0
+            ? PointsEarned
+            : (int)Math.Floor(PointsEarned * RefundedTotal / Total);
+        var reversed = Math.Max(0, targetReversed - PointsReversed);
+        PointsReversed += reversed;
+
+        var restored = 0;
+        if (fullyReturned && !RedeemedPointsRestored)
+        {
+            restored = PointsRedeemed;
+            RedeemedPointsRestored = true;
+        }
+
+        return (refunds, reversed, restored);
     }
 
     /// <summary>VAT summary per rate for the receipt and the VAT report.</summary>

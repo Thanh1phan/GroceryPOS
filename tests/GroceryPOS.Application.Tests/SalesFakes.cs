@@ -22,7 +22,7 @@ internal class InMemoryRepository<T> : IRepository<T> where T : Entity
     public Task<IReadOnlyList<T>> ListAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<T>>(Items.ToList());
 
-    public void Add(T entity)
+    public virtual void Add(T entity)
     {
         if (entity.IsTransient)
         {
@@ -83,6 +83,18 @@ internal sealed class InMemoryCustomerRepository : InMemoryRepository<Customer>,
 
 internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRepository
 {
+    private int _nextLineId = 1;
+
+    /// <summary>Also numbers the lines, like the database would (returns reference lines by id).</summary>
+    public override void Add(Sale entity)
+    {
+        base.Add(entity);
+        foreach (var line in entity.Lines.Where(l => l.IsTransient))
+        {
+            line.WithId(_nextLineId++);
+        }
+    }
+
     public Task<Sale?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(s => s.Code == code));
 
@@ -92,6 +104,22 @@ internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRe
             .Where(c => c.StartsWith(prefix, StringComparison.Ordinal))
             .OrderByDescending(c => c, StringComparer.Ordinal)
             .FirstOrDefault());
+}
+
+internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleReturn>, ISaleReturnRepository
+{
+    public Task<SaleReturn?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items.FirstOrDefault(r => r.Code == code));
+
+    public Task<string?> GetLastCodeWithPrefixAsync(string prefix, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items
+            .Select(r => r.Code)
+            .Where(c => c.StartsWith(prefix, StringComparison.Ordinal))
+            .OrderByDescending(c => c, StringComparer.Ordinal)
+            .FirstOrDefault());
+
+    public Task<IReadOnlyList<SaleReturn>> ListBySaleAsync(int saleId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SaleReturn>>(Items.Where(r => r.SaleId == saleId).OrderBy(r => r.ReturnedAt).ThenBy(r => r.Id).ToList());
 }
 
 internal static class EntityTestExtensions

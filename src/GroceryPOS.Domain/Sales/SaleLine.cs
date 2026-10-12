@@ -1,3 +1,4 @@
+using System.Globalization;
 using GroceryPOS.Domain.Catalog;
 using GroceryPOS.Domain.Common;
 
@@ -45,6 +46,16 @@ public sealed class SaleLine : Entity
     /// <summary>Share of the invoice-level discount (and points redemption) allocated to this line at completion.</summary>
     public decimal AllocatedDiscount { get; private set; }
 
+    /// <summary>Quantity already taken back through customer returns (phiếu trả hàng).</summary>
+    public decimal ReturnedQuantity { get; private set; }
+
+    /// <summary>Amount already refunded for this line through customer returns.</summary>
+    public decimal RefundedAmount { get; private set; }
+
+    public decimal RemainingQuantity => Quantity - ReturnedQuantity;
+
+    public bool IsFullyReturned => ReturnedQuantity >= Quantity;
+
     /// <summary>Price × quantity, rounded to whole đồng.</summary>
     public decimal GrossAmount => Money.Round(UnitPrice * Quantity);
 
@@ -77,6 +88,52 @@ public sealed class SaleLine : Entity
         }
 
         Quantity = rounded;
+    }
+
+    /// <summary>
+    /// Refund for returning <paramref name="quantity"/> units: the share of <see cref="FinalAmount"/>
+    /// (so line, invoice and points discounts are honoured). Returning the last remaining units refunds
+    /// exactly what is left, so a fully returned line always refunds its final amount to the đồng.
+    /// </summary>
+    public decimal RefundFor(decimal quantity)
+    {
+        var remainingRefund = FinalAmount - RefundedAmount;
+        if (quantity >= RemainingQuantity)
+        {
+            return remainingRefund;
+        }
+
+        return Math.Min(remainingRefund, Money.Round(FinalAmount * quantity / Quantity));
+    }
+
+    internal decimal RegisterReturn(decimal quantity)
+    {
+        var rounded = EnsureReturnable(quantity);
+        var refund = RefundFor(rounded);
+        ReturnedQuantity += rounded;
+        RefundedAmount += refund;
+        return refund;
+    }
+
+    /// <summary>Validates a return quantity and returns it rounded to <see cref="QuantityDecimals"/>.</summary>
+    internal decimal EnsureReturnable(decimal quantity)
+    {
+        var rounded = Math.Round(quantity, QuantityDecimals, MidpointRounding.AwayFromZero);
+        if (rounded <= 0)
+        {
+            throw new DomainException("return.quantity", "Số lượng trả phải lớn hơn 0.");
+        }
+
+        if (rounded > RemainingQuantity)
+        {
+            throw new DomainException(
+                "return.quantity",
+                RemainingQuantity == 0
+                    ? $"\"{ProductName}\" đã được trả hết."
+                    : $"\"{ProductName}\" chỉ còn có thể trả tối đa {RemainingQuantity.ToString("0.###", CultureInfo.InvariantCulture)} {Unit}.");
+        }
+
+        return rounded;
     }
 
     internal void SetDiscount(Discount discount) => Discount = discount ?? Discount.None;

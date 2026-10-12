@@ -22,3 +22,21 @@ public static class SaleErrors
     /// <summary>Turns a broken domain rule into an expected failure for the UI.</summary>
     public static Error From(DomainException exception) => new(exception.Code, exception.Message);
 }
+
+public static class ReturnErrors
+{
+    public static readonly Error SaleVoided = Error.Conflict("Hóa đơn đã bị hủy, không thể trả hàng.");
+
+    public static readonly Error SaleNotCompleted = Error.Conflict("Hóa đơn chưa hoàn tất.");
+
+    public static readonly Error AlreadyFullyReturned = Error.Conflict("Hóa đơn đã được trả hết hàng.");
+
+    public static readonly Error EmptyReturn = new("return.empty", "Vui lòng chọn sản phẩm cần trả.");
+
+    public static readonly Error ReturnNotFound = Error.NotFound("Không tìm thấy phiếu trả hàng.");
+
+    public static Error WindowExpired(int days) =>
+        Error.Forbidden($"Hóa đơn đã quá {days} ngày đổi trả. Vui lòng nhờ quản lý thực hiện.");
+
+    public static Error LineNotFound(int saleLineId) => Error.NotFound($"Dòng hàng #{saleLineId} không thuộc hóa đơn này.");
+}

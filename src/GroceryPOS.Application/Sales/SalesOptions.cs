@@ -19,5 +19,14 @@ public sealed record SalesOptions
     /// </summary>
     public bool AllowNegativeStock { get; init; } = true;
 
+    /// <summary>Customer return code prefix, e.g. "TH" → TH261012-0001.</summary>
+    public string ReturnPrefix { get; init; } = "TH";
+
+    /// <summary>
+    /// Days after the sale (store calendar days) within which a cashier may take a return.
+    /// Older invoices need the manager permission <c>sales.void</c>.
+    /// </summary>
+    public int ReturnWindowDays { get; init; } = 7;
+
     public LoyaltyPolicy Loyalty { get; init; } = LoyaltyPolicy.Default;
 }

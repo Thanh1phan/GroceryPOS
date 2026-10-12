@@ -37,3 +37,15 @@ public interface ISaleRepository : IRepository<Sale>
     /// <summary>Highest invoice code starting with <paramref name="prefix"/>, or null if none exists yet.</summary>
     Task<string?> GetLastCodeWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 }
+
+public interface ISaleReturnRepository : IRepository<SaleReturn>
+{
+    /// <summary>Loads a return including its lines. (<see cref="IRepository{T}.GetByIdAsync"/> must also include them.)</summary>
+    Task<SaleReturn?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
+
+    /// <summary>Highest return code starting with <paramref name="prefix"/>, or null if none exists yet.</summary>
+    Task<string?> GetLastCodeWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns (with lines) made against one invoice, oldest first.</summary>
+    Task<IReadOnlyList<SaleReturn>> ListBySaleAsync(int saleId, CancellationToken cancellationToken = default);
+}
