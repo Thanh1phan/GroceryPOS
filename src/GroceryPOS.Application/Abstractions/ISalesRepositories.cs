@@ -36,6 +36,18 @@ public interface ISaleRepository : IRepository<Sale>
 
     /// <summary>Highest invoice code starting with <paramref name="prefix"/>, or null if none exists yet.</summary>
     Task<string?> GetLastCodeWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sales (with lines and payments) completed by <paramref name="cashierId"/> with
+    /// <see cref="Sale.CompletedAt"/> in [<paramref name="from"/>, <paramref name="to"/>] (both inclusive),
+    /// whatever their current status (a sale voided later is still listed).
+    /// </summary>
+    Task<IReadOnlyList<Sale>> ListCompletedByCashierAsync(
+        int cashierId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
+
+    /// <summary>Sales (with payments) voided by <paramref name="userId"/> with <see cref="Sale.VoidedAt"/> in [from, to].</summary>
+    Task<IReadOnlyList<Sale>> ListVoidedByAsync(
+        int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
 }
 
 public interface ISaleReturnRepository : IRepository<SaleReturn>
@@ -48,4 +60,8 @@ public interface ISaleReturnRepository : IRepository<SaleReturn>
 
     /// <summary>Returns (with lines) made against one invoice, oldest first.</summary>
     Task<IReadOnlyList<SaleReturn>> ListBySaleAsync(int saleId, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns (with lines) taken by <paramref name="userId"/> with <see cref="SaleReturn.ReturnedAt"/> in [from, to].</summary>
+    Task<IReadOnlyList<SaleReturn>> ListByUserAsync(
+        int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
 }

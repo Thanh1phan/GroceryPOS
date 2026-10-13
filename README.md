@@ -10,14 +10,14 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases (auth, checkout/void, returns, POS lookup, inventory, goods receipts), DTOs, interfaces, Result pattern
+  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts), DTOs, interfaces, Result pattern
   GroceryPOS.Infrastructure  EF Core 8 (SQLite / SQL Server), repositories, BCrypt, Serilog   (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
   GroceryPOS.Testing         Dependency-free xUnit-compatible harness (temporary, see below)
-  GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, stock ledger, purchasing)
-  GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, POS lookup, inventory, purchasing, formatting)
+  GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
+  GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, formatting)
 ```
 
 Conventions:
@@ -27,6 +27,7 @@ Conventions:
 - Every stock change goes through `Domain.Inventory.StockMovement.Apply`, which updates the product and returns a ledger row (thẻ kho), so the ledger always explains the current stock.
 - Cost price is a moving weighted average: completing a goods receipt (`PN…`) re-averages each product's cost with the landed cost (after line and receipt discounts).
 - Customer returns (`TH…`) refund each line's share of its final (discounted) amount; the last units of a line refund exactly what is left. An invoice with returns can no longer be voided.
+- Shifts (`CA…`) are per user: the drawer's expected cash is the float plus the user's cash sales (net of change), minus void cash and cash refunds, plus/minus manual pay-ins/outs. Closing freezes the totals; what is left in the drawer pre-fills the next shift's float.
 - Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
 
 ## Build & run

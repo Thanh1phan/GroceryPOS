@@ -128,6 +128,22 @@ public static class Assert
         }
     }
 
+    public static void Contains<T>(IEnumerable<T> collection, Predicate<T> filter)
+    {
+        if (!collection.Any(item => filter(item)))
+        {
+            throw new AssertException("Assert.Contains() failure: no item matches the filter");
+        }
+    }
+
+    public static void Same(object? expected, object? actual)
+    {
+        if (!ReferenceEquals(expected, actual))
+        {
+            throw new AssertException($"Assert.Same() failure\n  Expected: {Show(expected)}\n  Actual:   {Show(actual)}");
+        }
+    }
+
     public static void DoesNotContain<T>(T expected, IEnumerable<T> collection)
     {
         if (collection.Contains(expected))

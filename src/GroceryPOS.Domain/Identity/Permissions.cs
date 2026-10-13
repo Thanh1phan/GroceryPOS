@@ -25,6 +25,7 @@ public static class Permissions
     public const string SalesVoid = "sales.void";
     public const string ReturnsCreate = "returns.create";
     public const string ShiftsManage = "shifts.manage";
+    public const string ShiftsSupervise = "shifts.supervise";
 
     public const string PurchasesManage = "purchases.manage";
     public const string InventoryView = "inventory.view";
@@ -52,6 +53,7 @@ public static class Permissions
         [SalesVoid] = "Hủy hóa đơn",
         [ReturnsCreate] = "Trả hàng",
         [ShiftsManage] = "Mở/đóng ca, két tiền",
+        [ShiftsSupervise] = "Xem & kết ca của nhân viên khác",
         [PurchasesManage] = "Nhập hàng",
         [InventoryView] = "Xem tồn kho",
         [InventoryAdjust] = "Điều chỉnh tồn kho",

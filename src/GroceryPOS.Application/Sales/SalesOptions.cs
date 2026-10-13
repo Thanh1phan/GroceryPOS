@@ -28,5 +28,14 @@ public sealed record SalesOptions
     /// </summary>
     public int ReturnWindowDays { get; init; } = 7;
 
+    /// <summary>Shift code prefix, e.g. "CA" → CA261013-0001.</summary>
+    public string ShiftPrefix { get; init; } = "CA";
+
+    /// <summary>
+    /// Absolute cash variance (VND) at which closing a shift requires a note explaining it.
+    /// Any non-zero variance below this is accepted silently (small rounding with 500/1.000 notes).
+    /// </summary>
+    public decimal ShiftVarianceNoteThreshold { get; init; } = 5_000;
+
     public LoyaltyPolicy Loyalty { get; init; } = LoyaltyPolicy.Default;
 }

@@ -12,7 +12,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-12)*
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-13)*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -50,7 +50,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] Receipt print preview (80mm)
 - [x] Customer returns (phiếu trả `TH{yyMMdd}-{0001}`): partial/multiple returns per invoice, discount-aware refunds, restock or write-off, proportional loyalty reversal, return window (7 days; older needs `sales.void`), audit (application layer; UI pending)
 - [ ] Returns screen: scan invoice, pick quantities, restock/write-off toggle, refund slip
-- [ ] Shifts: open/close, cash drawer count & variance
+- [x] Shifts (ca `CA{yyMMdd}-{0001}`): open with float, pay-in/pay-out with reason, live X-report, close with count by denomination, variance (note required ≥ 5.000 ₫), cash left for next shift, supervisor view/force-close (`shifts.supervise`), audit (application layer; UI pending)
+- [ ] Shift screens: open-shift dialog (pre-filled float), pay-in/out dialog, close-shift count sheet + printable shift report; POS requires an open shift
 
 ## M6 – Inventory & purchasing
 - [x] Goods receipt (phiếu nhập `PN{yyMMdd}-{0001}`): draft → complete/cancel, line + receipt discounts, moving weighted-average cost, optional new sell price, supplier debt, ledger + audit (application layer; UI pending)

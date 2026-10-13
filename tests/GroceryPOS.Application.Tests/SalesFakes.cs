@@ -4,6 +4,7 @@ using GroceryPOS.Domain.Common;
 using GroceryPOS.Domain.Inventory;
 using GroceryPOS.Domain.Partners;
 using GroceryPOS.Domain.Sales;
+using GroceryPOS.Domain.Shifts;
 
 namespace GroceryPOS.Application.Tests.Fakes;
 
@@ -104,6 +105,18 @@ internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRe
             .Where(c => c.StartsWith(prefix, StringComparison.Ordinal))
             .OrderByDescending(c => c, StringComparer.Ordinal)
             .FirstOrDefault());
+
+    public Task<IReadOnlyList<Sale>> ListCompletedByCashierAsync(
+        int cashierId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Sale>>(Items
+            .Where(s => s.CashierId == cashierId && s.CompletedAt >= from && s.CompletedAt <= to)
+            .ToList());
+
+    public Task<IReadOnlyList<Sale>> ListVoidedByAsync(
+        int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Sale>>(Items
+            .Where(s => s.VoidedBy == userId && s.VoidedAt >= from && s.VoidedAt <= to)
+            .ToList());
 }
 
 internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleReturn>, ISaleReturnRepository
@@ -120,6 +133,38 @@ internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleRetu
 
     public Task<IReadOnlyList<SaleReturn>> ListBySaleAsync(int saleId, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<SaleReturn>>(Items.Where(r => r.SaleId == saleId).OrderBy(r => r.ReturnedAt).ThenBy(r => r.Id).ToList());
+
+    public Task<IReadOnlyList<SaleReturn>> ListByUserAsync(
+        int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SaleReturn>>(Items
+            .Where(r => r.UserId == userId && r.ReturnedAt >= from && r.ReturnedAt <= to)
+            .ToList());
+}
+
+internal sealed class InMemoryShiftRepository : InMemoryRepository<Shift>, IShiftRepository
+{
+    public Task<Shift?> GetOpenByUserAsync(int userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items.FirstOrDefault(s => s.UserId == userId && s.IsOpen));
+
+    public Task<Shift?> GetLastClosedAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items.Where(s => !s.IsOpen).OrderByDescending(s => s.ClosedAt).ThenByDescending(s => s.Id).FirstOrDefault());
+
+    public Task<string?> GetLastCodeWithPrefixAsync(string prefix, CancellationToken cancellationToken = default) =>
+        Task.FromResult(Items
+            .Select(s => s.Code)
+            .Where(c => c.StartsWith(prefix, StringComparison.Ordinal))
+            .OrderByDescending(c => c, StringComparer.Ordinal)
+            .FirstOrDefault());
+
+    public Task<IReadOnlyList<Shift>> SearchAsync(ShiftFilter filter, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Shift>>(Items
+            .Where(s => (filter.From is null || s.OpenedAt >= filter.From)
+                && (filter.To is null || s.OpenedAt < filter.To)
+                && (filter.UserId is null || s.UserId == filter.UserId)
+                && (filter.Status is null || s.Status == filter.Status))
+            .OrderByDescending(s => s.OpenedAt)
+            .ThenByDescending(s => s.Id)
+            .ToList());
 }
 
 internal static class EntityTestExtensions

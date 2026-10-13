@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-13
+- Added cashier shifts & cash drawer (`Domain.Shifts.Shift`, ca bán hàng `CA{yyMMdd}-{0001}`): opening float, pay-in/pay-out movements with mandatory reason, closing with counted cash (typed or by VND denomination via `CashCount`), expected cash = float + cash sales − void cash − cash refunds + pay-ins − pay-outs, variance (thiếu/thừa) with a note required from `SalesOptions.ShiftVarianceNoteThreshold` (5.000 ₫), cash left in drawer vs. handed over. Totals (`ShiftTotals`) are frozen at closing.
+- Added `ShiftService`: current shift with live report and suggested float (what the last shift left in the drawer), open (one per user), pay-in/out (pay-out never exceeds drawer cash), summary, close, history. Counter totals come from the shift user's sales (by tender), voids and returns in the shift window.
+- New permission `shifts.supervise` (Admin, Quản lý) to view and force-close other users' shifts; audit actions `shift.opened`, `shift.closed`, `shift.cash_movement`.
+- Repository additions: `IShiftRepository`, `ISaleRepository.ListCompletedByCashierAsync/ListVoidedByAsync`, `ISaleReturnRepository.ListByUserAsync`; test harness gained `Assert.Same` and predicate `Assert.Contains`.
+- 24 new tests (Domain 124, Application 103 – all passing).
+
 ## 2026-10-12
 - Added customer returns (`Domain.Sales.SaleReturn`, phiếu trả hàng `TH{yyMMdd}-{0001}`): several partial returns per invoice, each line refunding its share of the final amount after line/invoice/points discounts (the last units refund exactly what is left); per-line restock or write-off (hư hỏng) with cost values; earned points reversed in proportion to the refunded share, redeemed points given back only when the whole invoice is returned. All rules are checked before the sale is touched.
 - `SaleLine` tracks `ReturnedQuantity` / `RefundedAmount`; `Sale` exposes `RefundedTotal`, `NetTotal`, `IsFullyReturned`, and refuses `Void` once it has returns (it would restock twice).
