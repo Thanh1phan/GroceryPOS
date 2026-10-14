@@ -12,7 +12,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-13)*
+- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-14)*
 - [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
@@ -56,7 +56,9 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 ## M6 – Inventory & purchasing
 - [x] Goods receipt (phiếu nhập `PN{yyMMdd}-{0001}`): draft → complete/cancel, line + receipt discounts, moving weighted-average cost, optional new sell price, supplier debt, ledger + audit (application layer; UI pending)
 - [x] Reorder suggestions from low-stock products (refill to 2× minimum)
-- [ ] Supplier payments (trả nợ NCC) and supplier returns (trả hàng NCC)
+- [x] Supplier payments (phiếu chi `PC{yyMMdd}-{0001}`, cash/transfer, cancel with reason restores debt), payables list, supplier debt ledger with opening/running/closing balance (`suppliers.pay`; application layer, UI pending)
+- [x] Supplier returns (`TN{yyMMdd}-{0001}`): against a completed receipt (capped by remaining quantity and landed cost) or free; stock out at average cost, refund and/or debt offset, audit (application layer; UI pending)
+- [ ] Supplier debt & return screens: payables list, pay dialog, debt ledger, supplier return editor (scan receipt code)
 - [ ] Goods receipt screens: receipt list, receipt editor with barcode scan, completion summary (below-cost warnings)
 - [x] Stock adjustments with reason + audit, and stock counts (kiểm kê) with variance value (application layer; UI pending)
 - [x] Stock movement ledger (`StockMovement`, written by checkout/void/adjust/count) + stock card query with opening/closing balance

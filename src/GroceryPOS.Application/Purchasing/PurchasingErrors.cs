@@ -22,3 +22,16 @@ public static class PurchasingErrors
 
     public static readonly Error OverPaid = new("receipt.paid", "Số tiền thanh toán vượt quá tổng tiền phiếu nhập.");
 }
+
+public static class SupplierDebtErrors
+{
+    public static readonly Error PaymentNotFound = Error.NotFound("Không tìm thấy phiếu chi.");
+
+    public static readonly Error ReturnNotFound = Error.NotFound("Không tìm thấy phiếu trả hàng nhà cung cấp.");
+
+    public static readonly Error NoDebt = Error.Conflict("Nhà cung cấp không còn công nợ.");
+
+    public static readonly Error PaymentForbidden = Error.Forbidden("Bạn không có quyền thanh toán công nợ nhà cung cấp.");
+
+    public static readonly Error ViewForbidden = Error.Forbidden("Bạn không có quyền xem công nợ nhà cung cấp.");
+}

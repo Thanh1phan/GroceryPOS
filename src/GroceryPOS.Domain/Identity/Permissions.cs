@@ -17,6 +17,7 @@ public static class Permissions
     public const string ProductsManage = "products.manage";
     public const string PricesChange = "prices.change";
     public const string SuppliersManage = "suppliers.manage";
+    public const string SupplierPaymentsManage = "suppliers.pay";
     public const string CustomersView = "customers.view";
     public const string CustomersManage = "customers.manage";
 
@@ -46,6 +47,7 @@ public static class Permissions
         [ProductsManage] = "Quản lý sản phẩm",
         [PricesChange] = "Thay đổi giá bán",
         [SuppliersManage] = "Quản lý nhà cung cấp",
+        [SupplierPaymentsManage] = "Thanh toán công nợ nhà cung cấp",
         [CustomersView] = "Xem khách hàng",
         [CustomersManage] = "Quản lý khách hàng",
         [SalesCreate] = "Bán hàng",

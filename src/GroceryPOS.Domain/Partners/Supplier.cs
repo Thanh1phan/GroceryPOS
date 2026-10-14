@@ -1,4 +1,5 @@
 using GroceryPOS.Domain.Common;
+using GroceryPOS.Domain.Sales;
 
 namespace GroceryPOS.Domain.Partners;
 
@@ -41,17 +42,24 @@ public sealed class Supplier : AuditableEntity
     public void AddDebt(decimal amount) =>
         DebtBalance += Guard.NotNegative(amount, "supplier.debt", "Số tiền công nợ không hợp lệ.");
 
-    /// <summary>Records a payment to the supplier (or reverses debt); cannot pay more than is owed.</summary>
-    public void PayDebt(decimal amount)
+    /// <summary>Records a payment to the supplier; cannot pay more than is owed.</summary>
+    public void PayDebt(decimal amount) =>
+        ReduceDebt(amount, "supplier.payment", "Số tiền thanh toán phải lớn hơn 0.", "Số tiền thanh toán vượt quá công nợ hiện tại");
+
+    /// <summary>Deducts the value of goods returned to the supplier from the payable balance (cấn trừ công nợ).</summary>
+    public void OffsetDebt(decimal amount) =>
+        ReduceDebt(amount, "supplier.offset", "Giá trị cấn trừ công nợ phải lớn hơn 0.", "Giá trị cấn trừ vượt quá công nợ hiện tại");
+
+    private void ReduceDebt(decimal amount, string code, string notPositiveMessage, string exceedsMessage)
     {
         if (amount <= 0)
         {
-            throw new DomainException("supplier.payment", "Số tiền thanh toán phải lớn hơn 0.");
+            throw new DomainException(code, notPositiveMessage);
         }
 
         if (amount > DebtBalance)
         {
-            throw new DomainException("supplier.payment", $"Số tiền thanh toán vượt quá công nợ hiện tại ({DebtBalance:#,0} ₫).");
+            throw new DomainException(code, $"{exceedsMessage} ({Money.Format(DebtBalance)}).");
         }
 
         DebtBalance -= amount;

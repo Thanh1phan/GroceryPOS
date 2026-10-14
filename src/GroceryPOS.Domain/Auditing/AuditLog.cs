@@ -47,6 +47,9 @@ public static class AuditActions
     public const string StockCounted = "inventory.counted";
     public const string GoodsReceived = "purchase.received";
     public const string GoodsReceiptCancelled = "purchase.cancelled";
+    public const string SupplierPaid = "purchase.supplier_paid";
+    public const string SupplierPaymentCancelled = "purchase.supplier_payment_cancelled";
+    public const string SupplierReturned = "purchase.supplier_returned";
     public const string ShiftOpened = "shift.opened";
     public const string ShiftClosed = "shift.closed";
     public const string CashMoved = "shift.cash_movement";

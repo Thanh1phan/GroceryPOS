@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-14
+- Added supplier payments (`Domain.Purchasing.SupplierPayment`, phiếu chi `PC{yyMMdd}-{0001}`): cash or bank transfer, whole-đồng amounts up to the current debt, debt before/after on the slip; cancelling requires a reason and puts the debt back. New permission `suppliers.pay` (Admin, Quản lý).
+- Added supplier returns (`Domain.Purchasing.SupplierReturn`, `TN{yyMMdd}-{0001}`): against a completed goods receipt (max received − already returned, price ≤ landed cost, default landed cost) or without one (default current cost); stock leaves through `SupplierReturn` ledger entries at average cost; value is refunded in money and/or offset against debt (`Supplier.OffsetDebt`), all rules checked before anything changes.
+- Added `SupplierPaymentService` (pay, cancel, payables list, payment search, supplier debt ledger with opening/running/closing balances) and `SupplierReturnService` (load returnable receipt, create, get, search), audited as `purchase.supplier_paid`, `purchase.supplier_payment_cancelled`, `purchase.supplier_returned`.
+- Domain error messages now format VND as `1.250.000 ₫` via `Money.Format`, independent of the OS culture.
+- 19 new tests (Domain 135, Application 111 – all passing).
+
 ## 2026-10-13
 - Added cashier shifts & cash drawer (`Domain.Shifts.Shift`, ca bán hàng `CA{yyMMdd}-{0001}`): opening float, pay-in/pay-out movements with mandatory reason, closing with counted cash (typed or by VND denomination via `CashCount`), expected cash = float + cash sales − void cash − cash refunds + pay-ins − pay-outs, variance (thiếu/thừa) with a note required from `SalesOptions.ShiftVarianceNoteThreshold` (5.000 ₫), cash left in drawer vs. handed over. Totals (`ShiftTotals`) are frozen at closing.
 - Added `ShiftService`: current shift with live report and suggested float (what the last shift left in the drawer), open (one per user), pay-in/out (pay-out never exceeds drawer cash), summary, close, history. Counter totals come from the shift user's sales (by tender), voids and returns in the shift window.

@@ -1,8 +1,18 @@
+using System.Globalization;
+
 namespace GroceryPOS.Domain.Sales;
 
 /// <summary>VND money helpers used by the sales domain. VND has no minor unit: amounts are whole đồng.</summary>
 public static class Money
 {
+    private static readonly NumberFormatInfo VndNumberFormat = new() { NumberGroupSeparator = ".", NumberDecimalSeparator = "," };
+
+    /// <summary>
+    /// vi-VN style amount for domain error messages, e.g. <c>1.250.000 ₫</c>, independent of the OS culture.
+    /// (UI code uses <c>Application.Formatting.Vnd</c>.)
+    /// </summary>
+    public static string Format(decimal amount) => Round(amount).ToString("#,0", VndNumberFormat) + " ₫";
+
     public static decimal Round(decimal amount) => Math.Round(amount, 0, MidpointRounding.AwayFromZero);
 
     /// <summary>VAT contained in a VAT-inclusive amount, e.g. 108.000 at 8% → 8.000.</summary>
