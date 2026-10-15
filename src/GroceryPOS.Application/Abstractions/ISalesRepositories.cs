@@ -21,6 +21,10 @@ public interface IProductRepository : IRepository<Product>
     Task<IReadOnlyList<Product>> ListLowStockAsync(CancellationToken cancellationToken = default);
 }
 
+public interface ICategoryRepository : IRepository<Category>
+{
+}
+
 public interface ICustomerRepository : IRepository<Customer>
 {
     Task<Customer?> GetByPhoneAsync(string normalizedPhone, CancellationToken cancellationToken = default);
@@ -48,6 +52,13 @@ public interface ISaleRepository : IRepository<Sale>
     /// <summary>Sales (with payments) voided by <paramref name="userId"/> with <see cref="Sale.VoidedAt"/> in [from, to].</summary>
     Task<IReadOnlyList<Sale>> ListVoidedByAsync(
         int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sales (with lines and payments) of all cashiers with <see cref="Sale.CompletedAt"/> in
+    /// [<paramref name="from"/>, <paramref name="to"/>), whatever their current status. Used by reports.
+    /// </summary>
+    Task<IReadOnlyList<Sale>> ListCompletedInPeriodAsync(
+        DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
 }
 
 public interface ISaleReturnRepository : IRepository<SaleReturn>
@@ -64,4 +75,8 @@ public interface ISaleReturnRepository : IRepository<SaleReturn>
     /// <summary>Returns (with lines) taken by <paramref name="userId"/> with <see cref="SaleReturn.ReturnedAt"/> in [from, to].</summary>
     Task<IReadOnlyList<SaleReturn>> ListByUserAsync(
         int userId, DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns (with lines) of all users with <see cref="SaleReturn.ReturnedAt"/> in [<paramref name="from"/>, <paramref name="to"/>).</summary>
+    Task<IReadOnlyList<SaleReturn>> ListInPeriodAsync(
+        DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
 }

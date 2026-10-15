@@ -66,8 +66,10 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] Inventory screens: adjustment dialog, stock count sheet, stock card, low-stock list
 
 ## M7 – Reports & dashboard
-- [ ] Daily revenue, best sellers, inventory value, profit
-- [ ] Dashboard (today's sales, low-stock, top products)
+- [x] Report queries (application layer): daily revenue with returns/voids/VAT/COGS/profit and tender split, best sellers (by quantity/revenue/profit, category filter, revenue share), profit by category, inventory value by category (cost/retail/potential profit, out/low/negative stock)
+- [x] Dashboard query: today vs. yesterday, 7-day trend, sales by hour, top 5 products, low-stock (profit only with `reports.view`)
+- [ ] Report screens: period picker (hôm nay/tuần/tháng/tùy chọn), revenue chart + table, best sellers, profit by category, inventory value; export to Excel/PDF
+- [ ] Dashboard screen (KPI cards, 7-day chart, hourly chart, top products, low-stock list)
 - [ ] Audit log viewer
 
 ## M8 – Polish

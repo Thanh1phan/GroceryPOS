@@ -117,6 +117,10 @@ internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRe
         Task.FromResult<IReadOnlyList<Sale>>(Items
             .Where(s => s.VoidedBy == userId && s.VoidedAt >= from && s.VoidedAt <= to)
             .ToList());
+
+    public Task<IReadOnlyList<Sale>> ListCompletedInPeriodAsync(
+        DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Sale>>(Items.Where(s => s.CompletedAt >= from && s.CompletedAt < to).ToList());
 }
 
 internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleReturn>, ISaleReturnRepository
@@ -139,6 +143,14 @@ internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleRetu
         Task.FromResult<IReadOnlyList<SaleReturn>>(Items
             .Where(r => r.UserId == userId && r.ReturnedAt >= from && r.ReturnedAt <= to)
             .ToList());
+
+    public Task<IReadOnlyList<SaleReturn>> ListInPeriodAsync(
+        DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SaleReturn>>(Items.Where(r => r.ReturnedAt >= from && r.ReturnedAt < to).ToList());
+}
+
+internal sealed class InMemoryCategoryRepository : InMemoryRepository<Category>, ICategoryRepository
+{
 }
 
 internal sealed class InMemoryShiftRepository : InMemoryRepository<Shift>, IShiftRepository

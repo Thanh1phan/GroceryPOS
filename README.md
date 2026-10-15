@@ -10,14 +10,14 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns), DTOs, interfaces, Result pattern
+  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern
   GroceryPOS.Infrastructure  EF Core 8 (SQLite / SQL Server), repositories, BCrypt, Serilog   (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
   GroceryPOS.Testing         Dependency-free xUnit-compatible harness (temporary, see below)
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
-  GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, formatting)
+  GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
 ```
 
 Conventions:
@@ -29,6 +29,7 @@ Conventions:
 - Supplier debt only changes through documents: completed receipts (`PN…`, unpaid part), payments (`PC…`, cancellable with a reason), and supplier returns (`TN…`, value not refunded in money is offset against debt). The supplier debt ledger is rebuilt from these documents backwards from the current balance. Goods returned to a supplier leave stock at the current average cost; a return against a receipt is capped at the received quantity minus earlier returns and at the receipt line's landed cost.
 - Customer returns (`TH…`) refund each line's share of its final (discounted) amount; the last units of a line refund exactly what is left. An invoice with returns can no longer be voided.
 - Shifts (`CA…`) are per user: the drawer's expected cash is the float plus the user's cash sales (net of change), minus void cash and cash refunds, plus/minus manual pay-ins/outs. Closing freezes the totals; what is left in the drawer pre-fills the next shift's float.
+- Reports work in store days (UTC+7, `Common.StoreCalendar`): a sale counts on the day it was completed, voided invoices are left out, and a customer return lowers revenue, VAT and profit on the day it was taken (restocked goods give their cost back, written-off goods do not), so a closed day's figures never change.
 - Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
 
 ## Build & run

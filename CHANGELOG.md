@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-15
+- Added `ReportService` (`reports.view`): daily revenue report (`GetRevenueAsync`, one row per store day incl. empty days + totals: invoices, voided count, gross/discount/sales, returns & refunds, net revenue, VAT, revenue excl. VAT, cost of goods, gross profit & margin, write-off cost, cash/transfer/card collected, average basket), best sellers ranked by quantity, revenue or profit with category filter and revenue share, and profit by category.
+- Report rules: sales count on their completion day in store time (UTC+7, new `Common.StoreCalendar`), voided invoices are excluded, customer returns are deducted on the day they were taken; restocked returns reverse their cost, written-off returns do not. Periods are limited to 366 days.
+- Added inventory value report (`reports.view` or `inventory.view`): cost value, shelf value incl./excl. VAT and potential profit per category, with out-of-stock, low-stock and negative-stock counts (negative stock adds no value; inactive products optional).
+- Added dashboard query (`dashboard.view`): today's net revenue, invoices, average basket and refunds vs. yesterday (% change), 7-day trend, sales by hour, top 5 products, low-stock alerts; gross profit only shown with `reports.view`.
+- New `ICategoryRepository`, `ISaleRepository.ListCompletedInPeriodAsync`, `ISaleReturnRepository.ListInPeriodAsync`; 9 new tests (Domain 135, Application 120 – all passing).
+
 ## 2026-10-14
 - Added supplier payments (`Domain.Purchasing.SupplierPayment`, phiếu chi `PC{yyMMdd}-{0001}`): cash or bank transfer, whole-đồng amounts up to the current debt, debt before/after on the slip; cancelling requires a reason and puts the debt back. New permission `suppliers.pay` (Admin, Quản lý).
 - Added supplier returns (`Domain.Purchasing.SupplierReturn`, `TN{yyMMdd}-{0001}`): against a completed goods receipt (max received − already returned, price ≤ landed cost, default landed cost) or without one (default current cost); stock leaves through `SupplierReturn` ledger entries at average cost; value is refunded in money and/or offset against debt (`Supplier.OffsetDebt`), all rules checked before anything changes.
