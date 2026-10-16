@@ -99,7 +99,7 @@ public class ReturnServiceTests
         Assert.Equal(15_000m, result.Value.RefundTotal);
         Assert.Equal(10_500m, result.Value.WrittenOffCost);
         Assert.Equal(90m, _noodles.StockQuantity);
-        Assert.False(_movements.All.Any(m => m.Type == StockMovementType.CustomerReturn));
+        Assert.DoesNotContain(_movements.All, m => m.Type == StockMovementType.CustomerReturn);
     }
 
     [Fact]

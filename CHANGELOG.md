@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-16
+- Moved all tests to real xUnit 2.9 (`dotnet test`); removed the temporary in-repo harness now that NuGet is reachable.
+- Added `GroceryPOS.Infrastructure` with EF Core 8: `GroceryDbContext` (implements `IUnitOfWork`) and entity configurations for identity, catalog, partners, sales/returns, stock ledger, purchasing and shifts (`Discount` as a complex type, shift totals as owned columns, restricted foreign keys, unique document codes/usernames/product codes/barcodes).
+- SQLite (default) and SQL Server are switchable via `DatabaseOptions` / `AddPersistence`; each provider has its own context subclass and `InitialCreate` migration. On SQLite, dates are stored as sortable integers so period queries run in SQL.
+- `AuditableEntityInterceptor` stamps created/updated time and user (`system` when nobody is signed in).
+- New `GroceryPOS.Infrastructure.Tests` (13 tests on in-memory SQLite: migrations, aggregate round-trips, date-range filters across UTC offsets, uniqueness, audit stamps, model-vs-migration drift for both providers). Totals: Domain 135, Application 120, Infrastructure 13 – all passing.
+
 ## 2026-10-15
 - Added `ReportService` (`reports.view`): daily revenue report (`GetRevenueAsync`, one row per store day incl. empty days + totals: invoices, voided count, gross/discount/sales, returns & refunds, net revenue, VAT, revenue excl. VAT, cost of goods, gross profit & margin, write-off cost, cash/transfer/card collected, average basket), best sellers ranked by quantity, revenue or profit with category filter and revenue share, and profit by category.
 - Report rules: sales count on their completion day in store time (UTC+7, new `Common.StoreCalendar`), voided invoices are excluded, customer returns are deducted on the day they were taken; restocked returns reverse their cost, written-off returns do not. Periods are limited to 366 days.

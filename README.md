@@ -11,13 +11,13 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
   GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern
-  GroceryPOS.Infrastructure  EF Core 8 (SQLite / SQL Server), repositories, BCrypt, Serilog   (planned)
+  GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider; repositories, BCrypt, Serilog (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
-  GroceryPOS.Testing         Dependency-free xUnit-compatible harness (temporary, see below)
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
   GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
+  GroceryPOS.Infrastructure.Tests  Persistence tests on in-memory SQLite (migrations, round-trips, model/migration drift)
 ```
 
 Conventions:
@@ -38,21 +38,31 @@ Requirements: .NET 8 SDK (the WinForms app will require Windows to run).
 
 ```bash
 dotnet build GroceryPOS.sln
-
-# Run tests (each test project is a small console runner; optional name filter as last arg)
-dotnet run --project tests/GroceryPOS.Domain.Tests
-dotnet run --project tests/GroceryPOS.Application.Tests -- AuthService
+dotnet test GroceryPOS.sln
 ```
 
-If nuget.org is unreachable (offline sandbox), build with an empty local feed – the projects have no package dependencies yet:
+## Database
+
+The store database is configured in the `Database` section of appsettings (`DatabaseOptions`):
+
+```json
+"Database": { "Provider": "Sqlite", "ConnectionString": "Data Source=grocerypos.db" }
+"Database": { "Provider": "SqlServer", "ConnectionString": "Server=.;Database=GroceryPOS;Trusted_Connection=True;TrustServerCertificate=True" }
+```
+
+`services.AddPersistence(options)` registers `GroceryDbContext` (also as `IUnitOfWork`) for the chosen provider.
+Each provider has its own context subclass and migration history (`Persistence/Migrations/Sqlite`, `.../SqlServer`).
+On SQLite, `DateTimeOffset` is stored as a sortable integer so period filters run in the database; money/quantities are `decimal(18,3)`.
+Created/updated time and user of auditable rows are stamped by `AuditableEntityInterceptor`.
+
+After changing the model, add a migration for **both** providers (the drift tests fail otherwise):
 
 ```bash
-mkdir -p /tmp/emptyfeed && dotnet build GroceryPOS.sln -p:RestoreSources=/tmp/emptyfeed
+dotnet tool restore
+cd src/GroceryPOS.Infrastructure
+dotnet ef migrations add <Name> --context SqliteGroceryDbContext -o Persistence/Migrations/Sqlite
+dotnet ef migrations add <Name> --context SqlServerGroceryDbContext -o Persistence/Migrations/SqlServer
 ```
-
-Tests use `[Fact]` / `[Theory]` / `Assert` from namespace `Xunit`, served by the in-repo harness
-`tests/GroceryPOS.Testing` because the CI sandbox cannot reach nuget.org yet. Moving to real xUnit
-only requires swapping the project reference for the xunit packages and deleting each `Program.cs`.
 
 ## Default account
 

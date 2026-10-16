@@ -12,8 +12,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Application: Result pattern, repository/UoW/current-user/password-hasher/audit abstractions
 - [x] Application: VND formatting/parsing (vi-VN)
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
-- [ ] Switch test harness to real xUnit packages – *blocked: nuget.org unreachable from the build sandbox (still blocked 2026-10-14)*
-- [ ] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, migrations
+- [x] Switch test harness to real xUnit packages (xunit 2.9, `dotnet test`)
+- [x] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, initial migrations per provider, audit-column interceptor, persistence tests
 - [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
 - [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
 - [ ] FluentValidation validators for application DTOs
