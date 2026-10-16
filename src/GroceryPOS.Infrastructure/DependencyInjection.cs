@@ -1,5 +1,9 @@
 using GroceryPOS.Application.Abstractions;
+using GroceryPOS.Infrastructure.Auditing;
 using GroceryPOS.Infrastructure.Persistence;
+using GroceryPOS.Infrastructure.Persistence.Repositories;
+using GroceryPOS.Infrastructure.Persistence.Seeding;
+using GroceryPOS.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -8,6 +12,38 @@ namespace GroceryPOS.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Registers everything the application layer needs from Infrastructure: the database (<see cref="AddPersistence"/>),
+    /// repositories, audit log, BCrypt password hashing and the start-up <see cref="IDatabaseInitializer"/>.
+    /// All database-bound services are scoped, so one scope = one unit of work.
+    /// </summary>
+    public static IServiceCollection AddInfrastructure(
+        this IServiceCollection services, DatabaseOptions database, SeedOptions? seed = null)
+    {
+        services.AddPersistence(database);
+        services.TryAddSingleton(seed ?? new SeedOptions());
+        services.TryAddSingleton<IPasswordHasher, BCryptPasswordHasher>();
+
+        services.AddScoped<IAuditService>(sp => new AuditService(
+            sp.GetRequiredService<GroceryDbContext>(), sp.GetRequiredService<TimeProvider>(), sp.GetService<ICurrentUser>()));
+        services.AddScoped<IDatabaseInitializer, DatabaseInitializer>();
+
+        services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IRoleRepository, RoleRepository>();
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<ICustomerRepository, CustomerRepository>();
+        services.AddScoped<ISupplierRepository, SupplierRepository>();
+        services.AddScoped<ISaleRepository, SaleRepository>();
+        services.AddScoped<ISaleReturnRepository, SaleReturnRepository>();
+        services.AddScoped<IStockMovementRepository, StockMovementRepository>();
+        services.AddScoped<IGoodsReceiptRepository, GoodsReceiptRepository>();
+        services.AddScoped<ISupplierPaymentRepository, SupplierPaymentRepository>();
+        services.AddScoped<ISupplierReturnRepository, SupplierReturnRepository>();
+        services.AddScoped<IShiftRepository, ShiftRepository>();
+        return services;
+    }
+
     /// <summary>
     /// Registers the database for the configured provider. <see cref="GroceryDbContext"/> and <see cref="IUnitOfWork"/>
     /// resolve to the same scoped instance, so repositories and the unit of work share one change tracker.

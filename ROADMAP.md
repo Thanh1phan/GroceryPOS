@@ -14,8 +14,9 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Test projects for Domain and Application (xUnit-compatible, dependency-free harness in `tests/GroceryPOS.Testing`)
 - [x] Switch test harness to real xUnit packages (xunit 2.9, `dotnet test`)
 - [x] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, initial migrations per provider, audit-column interceptor, persistence tests
-- [ ] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin)
-- [ ] Infrastructure: BCrypt password hasher, Serilog (file, rolling)
+- [x] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin), `AddInfrastructure` DI wiring
+- [x] Infrastructure: BCrypt password hasher
+- [ ] Infrastructure: Serilog (file, rolling)
 - [ ] FluentValidation validators for application DTOs
 
 ## M2 – Authentication & authorization

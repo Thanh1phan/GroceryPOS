@@ -11,7 +11,7 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
   GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern
-  GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider; repositories, BCrypt, Serilog (planned)
+  GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding; Serilog (planned)
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
@@ -50,7 +50,10 @@ The store database is configured in the `Database` section of appsettings (`Data
 "Database": { "Provider": "SqlServer", "ConnectionString": "Server=.;Database=GroceryPOS;Trusted_Connection=True;TrustServerCertificate=True" }
 ```
 
-`services.AddPersistence(options)` registers `GroceryDbContext` (also as `IUnitOfWork`) for the chosen provider.
+`services.AddInfrastructure(databaseOptions, seedOptions)` registers `GroceryDbContext` (also as `IUnitOfWork`) for the chosen provider,
+all repositories, `IAuditService`, `IPasswordHasher` (BCrypt) and `IDatabaseInitializer`. Call
+`IDatabaseInitializer.InitializeAsync()` in a scope at start-up: it applies migrations and seeds roles, the default admin
+and a default category (safe to run on every start).
 Each provider has its own context subclass and migration history (`Persistence/Migrations/Sqlite`, `.../SqlServer`).
 On SQLite, `DateTimeOffset` is stored as a sortable integer so period filters run in the database; money/quantities are `decimal(18,3)`.
 Created/updated time and user of auditable rows are stamped by `AuditableEntityInterceptor`.
@@ -66,4 +69,5 @@ dotnet ef migrations add <Name> --context SqlServerGroceryDbContext -o Persisten
 
 ## Default account
 
-Seeding will create `admin` / `admin123` (must be changed on first login) once the Infrastructure layer lands.
+On a new database the initializer creates `admin` / `admin123` (role Admin) and forces a password change on first login.
+Override it in the `Seed` section of appsettings (`AdminUsername`, `AdminPassword`, `AdminFullName`, `DefaultCategoryName`).

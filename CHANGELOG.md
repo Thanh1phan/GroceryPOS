@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-16 (2)
+- Added EF Core repositories for every application abstraction (users with role + permissions, roles, categories, products, customers, suppliers, sales, customer returns, stock ledger, goods receipts, supplier payments/returns, shifts): period filters and document-number lookups run in SQL, aggregates load with their lines.
+- Product quick search is accent- and case-insensitive (`sua tuoi` finds "Sữa tươi", `duong` finds "Đường") via the new `Application.Common.SearchText`; exact code/barcode hits rank first, inactive products are skipped.
+- Added `AuditService` (entries saved in the same unit of work as the change, stamped with the signed-in user), `BCryptPasswordHasher` (BCrypt.Net-Next, work factor 11) and `IDatabaseInitializer` (migrate + idempotent seed: 4 system roles, new permissions granted to Admin, default `admin` / `admin123` that must be changed, one default category).
+- `services.AddInfrastructure(databaseOptions, seedOptions)` registers persistence, repositories, audit, hashing and seeding in one call.
+- 16 new tests incl. an end-to-end DI login against a seeded SQLite file (Domain 135, Application 125, Infrastructure 24 – all passing).
+
 ## 2026-10-16
 - Moved all tests to real xUnit 2.9 (`dotnet test`); removed the temporary in-repo harness now that NuGet is reachable.
 - Added `GroceryPOS.Infrastructure` with EF Core 8: `GroceryDbContext` (implements `IUnitOfWork`) and entity configurations for identity, catalog, partners, sales/returns, stock ledger, purchasing and shifts (`Discount` as a complex type, shift totals as owned columns, restricted foreign keys, unique document codes/usernames/product codes/barcodes).
