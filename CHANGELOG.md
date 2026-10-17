@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-17
+- Added Serilog logging (`Infrastructure.Logging`): daily rolling, size-capped `grocerypos-*.log` plus an error-only `errors-*.log`, every line stamped with the signed-in user; levels, folder and retention come from the `AppLogging` section. `services.AddGroceryLogging(options)` routes `ILogger<T>` (and EF Core) to it.
+- `AuthService` now logs sign-in, failed logins, lockouts, inactive accounts, password changes and sign-out (structured, never the password).
+- Added FluentValidation validators (`Application.Validation`) for checkout/discounts, customer returns, stock adjustments and counts, goods receipts, supplier payments and returns, shift open/pay-in/out/close (count by denomination must match the typed total) and the new `LoginInput` / `ChangePasswordInput`; helpers `ToFieldErrors()`, `ToResult()`, `Check()` and shared money rules (whole đồng, not negative).
+- Added `services.AddApplication()` registering every use case, the singleton desktop session (`IUserSessionStore` = `ICurrentUser`), store settings and all validators; a test builds the full container (`ValidateOnBuild`) and logs in end-to-end.
+- 26 new tests (Domain 135, Application 142, Infrastructure 33 – all passing).
+
 ## 2026-10-16 (2)
 - Added EF Core repositories for every application abstraction (users with role + permissions, roles, categories, products, customers, suppliers, sales, customer returns, stock ledger, goods receipts, supplier payments/returns, shifts): period filters and document-number lookups run in SQL, aggregates load with their lines.
 - Product quick search is accent- and case-insensitive (`sua tuoi` finds "Sữa tươi", `duong` finds "Đường") via the new `Application.Common.SearchText`; exact code/barcode hits rank first, inactive products are skipped.

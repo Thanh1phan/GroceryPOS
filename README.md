@@ -10,14 +10,14 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern
-  GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding; Serilog (planned)
+  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
+  GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding, Serilog file logging
   GroceryPOS.UI.Controls     Reusable themed WinForms component library                       (planned)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
   GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
-  GroceryPOS.Infrastructure.Tests  Persistence tests on in-memory SQLite (migrations, round-trips, model/migration drift)
+  GroceryPOS.Infrastructure.Tests  Persistence tests on in-memory SQLite (migrations, round-trips, model/migration drift, DI composition, logging)
 ```
 
 Conventions:
@@ -30,6 +30,7 @@ Conventions:
 - Customer returns (`TH…`) refund each line's share of its final (discounted) amount; the last units of a line refund exactly what is left. An invoice with returns can no longer be voided.
 - Shifts (`CA…`) are per user: the drawer's expected cash is the float plus the user's cash sales (net of change), minus void cash and cash refunds, plus/minus manual pay-ins/outs. Closing freezes the totals; what is left in the drawer pre-fills the next shift's float.
 - Reports work in store days (UTC+7, `Common.StoreCalendar`): a sale counts on the day it was completed, voided invoices are left out, and a customer return lowers revenue, VAT and profit on the day it was taken (restocked goods give their cost back, written-off goods do not), so a closed day's figures never change.
+- Input forms are pre-validated with FluentValidation (`Application.Validation`, e.g. `CheckoutRequestValidator`, `CloseShiftRequestValidator`, `ChangePasswordInputValidator`); `ToFieldErrors()` gives per-field Vietnamese messages for dialogs and `ToResult()` plugs into the Result pattern. Services still enforce every rule themselves.
 - Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
 
 ## Build & run
@@ -66,6 +67,26 @@ cd src/GroceryPOS.Infrastructure
 dotnet ef migrations add <Name> --context SqliteGroceryDbContext -o Persistence/Migrations/Sqlite
 dotnet ef migrations add <Name> --context SqlServerGroceryDbContext -o Persistence/Migrations/SqlServer
 ```
+
+## Composition & logging
+
+```csharp
+services.AddApplication(salesOptions)                 // use cases, session (ICurrentUser), validators
+        .AddInfrastructure(databaseOptions, seedOptions)
+        .AddGroceryLogging(loggingOptions);           // ILogger<T> → Serilog
+```
+
+Logging is configured in the `AppLogging` section (`LoggingOptions`):
+
+```json
+"AppLogging": { "Directory": null, "MinimumLevel": "Information", "FrameworkMinimumLevel": "Warning",
+                "RetainedFileCountLimit": 30, "FileSizeLimitMegabytes": 10, "WriteErrorLog": true }
+```
+
+Files go to `%LocalAppData%\GroceryPOS\logs` by default (relative `Directory` = next to the app): `grocerypos-yyyyMMdd.log`
+(daily, rolls over by size, 30 days) and `errors-yyyyMMdd.log` (Error/Fatal only, 90 days). Every line carries the signed-in
+user, e.g. `[INF] (admin) …AuthService: User admin signed in as Admin`. Business actions are additionally kept in the
+database audit log (`IAuditService`).
 
 ## Default account
 

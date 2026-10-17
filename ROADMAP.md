@@ -16,8 +16,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Infrastructure: EF Core 8 DbContext (SQLite default, SQL Server switchable), configurations, initial migrations per provider, audit-column interceptor, persistence tests
 - [x] Infrastructure: repositories, UnitOfWork, audit service, seed data (roles + default admin), `AddInfrastructure` DI wiring
 - [x] Infrastructure: BCrypt password hasher
-- [ ] Infrastructure: Serilog (file, rolling)
-- [ ] FluentValidation validators for application DTOs
+- [x] Infrastructure: Serilog (daily rolling + size-capped file, error-only file, current-user enricher, `AddGroceryLogging`)
+- [x] FluentValidation validators for application DTOs (+ `AddApplication()` DI registration of use cases, session and validators)
 
 ## M2 – Authentication & authorization
 - [x] AuthService: login, lockout after failed attempts, change password, logout (application layer)

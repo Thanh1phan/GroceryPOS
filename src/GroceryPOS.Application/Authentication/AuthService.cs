@@ -2,6 +2,8 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Domain.Auditing;
 using GroceryPOS.Domain.Identity;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace GroceryPOS.Application.Authentication;
 
@@ -24,6 +26,7 @@ public sealed class AuthService : IAuthService
     private readonly IAuditService _audit;
     private readonly TimeProvider _clock;
     private readonly LockoutPolicy _lockout;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IUserRepository users,
@@ -32,7 +35,8 @@ public sealed class AuthService : IAuthService
         IUserSessionStore sessions,
         IAuditService audit,
         TimeProvider clock,
-        LockoutPolicy? lockout = null)
+        LockoutPolicy? lockout = null,
+        ILogger<AuthService>? logger = null)
     {
         _users = users;
         _unitOfWork = unitOfWork;
@@ -41,6 +45,7 @@ public sealed class AuthService : IAuthService
         _audit = audit;
         _clock = clock;
         _lockout = lockout ?? LockoutPolicy.Default;
+        _logger = logger ?? NullLogger<AuthService>.Instance;
     }
 
     public async Task<Result<UserSession>> LoginAsync(string username, string password, CancellationToken cancellationToken = default)
@@ -58,11 +63,13 @@ public sealed class AuthService : IAuthService
         {
             _audit.RecordFor(null, normalized, AuditActions.LoginFailed, "Tài khoản không tồn tại");
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _logger.LogWarning("Login failed for unknown user {Username}", normalized);
             return AuthErrors.InvalidCredentials;
         }
 
         if (user.IsLockedOut(now))
         {
+            _logger.LogWarning("Login rejected for {Username}: locked out until {LockoutEnd}", user.Username, user.LockoutEnd);
             return AuthErrors.LockedOut(user.LockoutEnd!.Value, now);
         }
 
@@ -71,12 +78,22 @@ public sealed class AuthService : IAuthService
             var lockedNow = user.RegisterFailedLogin(now, _lockout);
             _audit.RecordFor(user.Id, user.Username, lockedNow ? AuditActions.AccountLocked : AuditActions.LoginFailed);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            if (lockedNow)
+            {
+                _logger.LogWarning("Account {Username} locked after {Attempts} failed logins", user.Username, _lockout.MaxFailedAttempts);
+            }
+            else
+            {
+                _logger.LogWarning("Login failed for {Username}: wrong password", user.Username);
+            }
+
             return lockedNow ? AuthErrors.LockedOut(user.LockoutEnd!.Value, now) : AuthErrors.InvalidCredentials;
         }
 
         // Inactive check comes after the password check so it does not leak account status to guessers.
         if (!user.IsActive)
         {
+            _logger.LogWarning("Login rejected for {Username}: account inactive", user.Username);
             return AuthErrors.Inactive;
         }
 
@@ -93,6 +110,7 @@ public sealed class AuthService : IAuthService
         _sessions.SignIn(session);
         _audit.Record(AuditActions.LoginSucceeded, nameof(User), user.Id.ToString());
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation("User {Username} signed in as {Role}", user.Username, session.RoleName);
         return session;
     }
 
@@ -130,6 +148,7 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _sessions.SignIn(session with { MustChangePassword = false });
+        _logger.LogInformation("User {Username} changed password", session.Username);
         return Result.Success();
     }
 
@@ -143,5 +162,6 @@ public sealed class AuthService : IAuthService
         _audit.Record(AuditActions.Logout, nameof(User), session.UserId.ToString());
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         _sessions.SignOut();
+        _logger.LogInformation("User {Username} signed out", session.Username);
     }
 }

@@ -1,5 +1,6 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Infrastructure.Auditing;
+using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Repositories;
 using GroceryPOS.Infrastructure.Persistence.Seeding;
@@ -7,6 +8,8 @@ using GroceryPOS.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Serilog.Extensions.Logging;
 
 namespace GroceryPOS.Infrastructure;
 
@@ -71,6 +74,27 @@ public static class DependencyInjection
         }
 
         services.AddScoped<IUnitOfWork>(sp => sp.GetRequiredService<GroceryDbContext>());
+        return services;
+    }
+
+    /// <summary>
+    /// Routes <c>Microsoft.Extensions.Logging</c> (<c>ILogger&lt;T&gt;</c>, EF Core) to Serilog files built from
+    /// <paramref name="options"/>. Pass <paramref name="logger"/> to reuse a bootstrap logger created at start-up
+    /// (it is then flushed and disposed with the container); otherwise one is created on first use.
+    /// </summary>
+    public static IServiceCollection AddGroceryLogging(
+        this IServiceCollection services, LoggingOptions options, Serilog.ILogger? logger = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        services.TryAddSingleton(options);
+        services.TryAddSingleton<Serilog.ILogger>(sp =>
+            logger ?? SerilogConfiguration.CreateLogger(options, () => sp.GetService<ICurrentUser>()));
+        services.AddLogging(builder =>
+        {
+            builder.ClearProviders();
+            builder.SetMinimumLevel(LogLevel.Trace); // Serilog applies the configured levels.
+        });
+        services.AddSingleton<ILoggerProvider>(sp => new SerilogLoggerProvider(sp.GetRequiredService<Serilog.ILogger>(), dispose: false));
         return services;
     }
 
