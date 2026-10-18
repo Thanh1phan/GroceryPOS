@@ -28,8 +28,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] Global exception handling + Serilog wiring in WinForms host
 
 ## M3 – UI component library (GroceryPOS.UI.Controls)
-- [ ] ThemeManager with color/font/spacing tokens, light/dark themes
-- [ ] Rounded buttons (primary/secondary/danger), icon text box with placeholder & validation state
+- [x] ThemeManager with color/font/spacing tokens, light/dark themes (WCAG-checked palettes, `Track(form)` live switching, font cache with icon-font fallback)
+- [x] Rounded buttons (primary/secondary/danger/ghost, icon glyph, focus ring), icon text box with placeholder & validation state (error/warning/valid, helper text, Enter event for scanners)
 - [ ] Combo box, numeric/currency input, date picker
 - [ ] Modern grid wrapper with paging/search/sorting
 - [ ] Card/panel, sidebar navigation, top bar, tab control, badge

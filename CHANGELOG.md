@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-18
+- Started the component library `GroceryPOS.UI.Controls` (net8.0-windows, builds on Linux via `EnableWindowsTargeting`): design tokens (`ColorTokens`, `TypographyTokens`, `SpacingTokens`) with built-in light ("Sáng") and dark ("Tối") themes, and `ThemeManager` (`SetMode`/`ToggleMode`, `ThemeChanged`, `Apply`/`Track` for plain WinForms controls, `IThemeable` for self-styled ones) plus `ThemeFonts` cache (Segoe UI; Segoe Fluent Icons → MDL2 fallback).
+- Added `ModernButton`: rounded, owner-drawn `Button` with Primary/Secondary/Danger/Ghost variants, hover/pressed/disabled states, keyboard focus ring and optional icon glyph (`Icons.Glyphs`); keeps `AcceptButton`/`DialogResult` behaviour.
+- Added `ModernTextBox`: rounded input with leading icon, placeholder, password mode, read-only look, validation state (error/warning/valid) and a reserved message line (`SetError`, `SetWarning`, `ClearValidation`, `HelperText`), plus `EnterPressed` for barcode scanners.
+- State → color mapping (`ButtonPalette`, `InputPalette`) and `ColorMath` are pure and covered by the new `GroceryPOS.UI.Controls.Tests`, including WCAG AA contrast checks for every theme and button state.
+- 51 new tests (Domain 135, Application 142, Infrastructure 33, UI.Controls 51 – all passing).
+
 ## 2026-10-17
 - Added Serilog logging (`Infrastructure.Logging`): daily rolling, size-capped `grocerypos-*.log` plus an error-only `errors-*.log`, every line stamped with the signed-in user; levels, folder and retention come from the `AppLogging` section. `services.AddGroceryLogging(options)` routes `ILogger<T>` (and EF Core) to it.
 - `AuthService` now logs sign-in, failed logins, lockouts, inactive accounts, password changes and sign-out (structured, never the password).
