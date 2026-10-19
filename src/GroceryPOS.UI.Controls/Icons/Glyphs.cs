@@ -31,4 +31,8 @@ public static class Glyphs
     public const string ChevronDown = "\uE70D";
     public const string ChevronUp = "\uE70E";
     public const string Clear = "\uE894";
+    public const string ChevronLeft = "\uE76B";
+    public const string ChevronRight = "\uE76C";
+    public const string First = "\uE892";
+    public const string Last = "\uE893";
 }

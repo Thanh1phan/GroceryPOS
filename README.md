@@ -12,12 +12,12 @@ src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
   GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
   GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding, Serilog file logging
-  GroceryPOS.UI.Controls     Themed WinForms component library: design tokens, light/dark ThemeManager, ModernButton, ModernTextBox, ModernNumericBox/ModernCurrencyBox, ModernDatePicker, ModernComboBox (in progress)
+  GroceryPOS.UI.Controls     Themed WinForms component library: design tokens, light/dark ThemeManager, ModernButton, ModernTextBox, ModernNumericBox/ModernCurrencyBox, ModernDatePicker, ModernComboBox, ModernDataGrid (in progress)
   GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
 tests/
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
   GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
-  GroceryPOS.UI.Controls.Tests  Theme & input core tests (color math, WCAG contrast, state colors, number/date parsing, date presets, accent-insensitive matching)
+  GroceryPOS.UI.Controls.Tests  Theme & input core tests (color math, WCAG contrast, state colors, number/date parsing, date presets, accent-insensitive matching, grid search/sort/paging, pager links)
   GroceryPOS.Infrastructure.Tests  Persistence tests on in-memory SQLite (migrations, round-trips, model/migration drift, DI composition, logging)
 ```
 
@@ -32,8 +32,9 @@ Conventions:
 - Shifts (`CA…`) are per user: the drawer's expected cash is the float plus the user's cash sales (net of change), minus void cash and cash refunds, plus/minus manual pay-ins/outs. Closing freezes the totals; what is left in the drawer pre-fills the next shift's float.
 - Reports work in store days (UTC+7, `Common.StoreCalendar`): a sale counts on the day it was completed, voided invoices are left out, and a customer return lowers revenue, VAT and profit on the day it was taken (restocked goods give their cost back, written-off goods do not), so a closed day's figures never change.
 - Input forms are pre-validated with FluentValidation (`Application.Validation`, e.g. `CheckoutRequestValidator`, `CloseShiftRequestValidator`, `ChangePasswordInputValidator`); `ToFieldErrors()` gives per-field Vietnamese messages for dialogs and `ToResult()` plugs into the Result pattern. Services still enforce every rule themselves.
-- UI colors, fonts and spacing come only from the current theme (`GroceryPOS.UI.Controls.Theming.ThemeManager.Current`); forms call `ThemeManager.Track(this)` and modern controls repaint themselves when the theme changes. Theme core files (`Theming/Core`) must stay free of WinForms types so they can be tested on Linux; the same goes for `Inputs/Core` (number/date parsing and formatting, date presets, `TextMatch`).
+- UI colors, fonts and spacing come only from the current theme (`GroceryPOS.UI.Controls.Theming.ThemeManager.Current`); forms call `ThemeManager.Track(this)` and modern controls repaint themselves when the theme changes. Theme core files (`Theming/Core`) must stay free of WinForms types so they can be tested on Linux; the same goes for `Inputs/Core` (number/date parsing and formatting, date presets, `TextMatch`) and `Grids/Core` (`GridQuery`, `GridPage<T>`, `GridDataView<T>`, `PageLinks`).
 - Inputs: amounts use `ModernCurrencyBox` (whole đồng, `₫` suffix, `25k` = 25.000, ↑/↓ ±1.000), other numbers `ModernNumericBox` (`Format = NumericFormat.Quantity/Percent/…`), dates `ModernDatePicker` (dd/MM/yyyy; also accepts `19/10`, `191026`, `hôm nay`, `-7`; ↑/↓ ±1 day, F4 calendar), lists `ModernComboBox` (`DataSource` + `DisplayMember`/`ValueMember`; `DropDownStyle = DropDown` filters as you type without accents). Report filters use `DatePresets` (Hôm nay, Tuần này, Tháng trước…; weeks start on Monday).
+- Lists: use `ModernDataGrid`. Add columns with `AddTextColumn("Name", "Tên hàng")` (width 0 = fill), `AddMoneyColumn`, `AddNumberColumn`, `AddDateColumn`, `AddCheckColumn` (dotted paths like `Category.Name` work), put screen buttons in `ToolbarItems`, then either `SetItems(rows)` for in-memory search/sort/paging or set `DataProvider = (query, ct) => …` to return a `GridPage<object>` per `GridQuery` for large tables. Handle `RowActivated` to open the edit dialog.
 - Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
 
 ## Build & run

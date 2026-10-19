@@ -16,12 +16,13 @@
   <ItemGroup>
     <!--
       The theme core (tokens, color math, state → color resolution) and the input core (number/date
-      parsing, date presets, accent-insensitive matching) only depend on System.Drawing.Color and the BCL,
+      parsing, date presets, accent-insensitive matching) and the grid core (search/sort/paging, pager links) only depend on System.Drawing.Color and the BCL,
       so they are compiled into this cross-platform test project directly. The WinForms controls themselves
       target net8.0-windows and cannot run on the Linux test agents.
     -->
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Theming\Core\**\*.cs" LinkBase="ThemeCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Inputs\Core\**\*.cs" LinkBase="InputCore" />
+    <Compile Include="..\..\src\GroceryPOS.UI.Controls\Grids\Core\**\*.cs" LinkBase="GridCore" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

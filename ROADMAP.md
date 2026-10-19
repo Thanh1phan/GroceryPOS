@@ -32,7 +32,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Rounded buttons (primary/secondary/danger/ghost, icon glyph, focus ring), icon text box with placeholder & validation state (error/warning/valid, helper text, Enter event for scanners)
 - [x] Combo box (owner-drawn, accent-insensitive filter-as-you-type, `DataSource`/`ValueMember`), numeric/currency input (live vi-VN grouping, `25k` shortcut, ↑/↓ stepping, range clamp), date picker (dd/MM/yyyy + shortcuts, calendar drop-down, min/max), date-range presets for report filters; text box gained suffix and clickable trailing icon
 - [ ] Date-range picker control (preset list + from/to) for report and list screens
-- [ ] Modern grid wrapper with paging/search/sorting
+- [x] Modern grid wrapper with paging/search/sorting (`ModernDataGrid`: in-memory or provider-paged data, debounced accent-insensitive search, header sort cycle, pager with page links + page size, typed column helpers, toolbar slot, empty state)
 - [ ] Card/panel, sidebar navigation, top bar, tab control, badge
 - [ ] Toast notifications, modal dialog, loading overlay
 - [ ] BaseForm / BaseUserControl / BaseListView / BaseEditDialog

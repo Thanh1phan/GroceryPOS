@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-19 (data grid)
+- Added `ModernDataGrid` to `GroceryPOS.UI.Controls`: one list control for every screen – search box (300 ms debounce, Esc clears, Ctrl+F, typing in the grid starts a search) with a toolbar slot for screen buttons, themed flat grid (hover row, brand-tinted selection, empty-state text, DPI-aware row heights) and a pager (summary "Hiển thị 21–40 / 1.235 dòng", first/prev/page links/next/last, 20/50/100/200 rows per page, Ctrl+PageUp/PageDown).
+- Two data modes: `SetItems(...)` searches/sorts/pages in memory (accent-insensitive search over what the user sees, e.g. "32.000 ₫"; header click cycles ascending → descending → unsorted; Vietnamese collation; search, sort, page and selection are kept on reload), or `DataProvider` loads each page from the application layer (stale responses dropped, `LoadFailed` or global handler on errors).
+- Column helpers `AddTextColumn`, `AddMoneyColumn` (`#,##0 ₫`), `AddNumberColumn`, `AddDateColumn`, `AddCheckColumn` with dotted property paths (`Category.Name`); events `RowActivated` (Enter/double-click), `SelectionChanged`, `QueryChanged`, `PageLoaded`.
+- New pure grid core (`Grids/Core`): `GridQuery`, `GridPage<T>`, `GridDataView<T>`, `PageLinks` (1 … 4 5 6 … 20), `GridPalette` (WCAG-checked), `PropertyPath` – 40 new tests (UI.Controls 198; Domain 135, Application 142, Infrastructure 33 – all passing).
+
 ## 2026-10-19
 - Added input controls to `GroceryPOS.UI.Controls`: `ModernNumericBox` (vi-VN grouping while typing with a stable caret, min/max clamp on leave, ↑/↓ stepping with Shift ×10, keypad decimal key → decimal comma, nullable via `AllowEmpty`), `ModernCurrencyBox` (whole đồng, `₫` suffix, `25k` → 25.000, steps of 1.000 đ) and `ModernDatePicker` (dd/MM/yyyy, accepts `19/10`, `191026`, `hôm nay`, `hôm qua`, `+3`/`-7`; ↑/↓ day, PageUp/PageDown month, F4/Alt+↓ calendar drop-down; min/max with Vietnamese error messages).
 - Added `ModernComboBox`: same rounded box, icon, placeholder and validation line as the text box, owner-drawn themed items, `DataSource`/`DisplayMember`/`ValueMember`, and in DropDown style an accent-insensitive filter-as-you-type list (best matches first, `LimitToList` for lookups vs. free text).
