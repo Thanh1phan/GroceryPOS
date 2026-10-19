@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-19
+- Added input controls to `GroceryPOS.UI.Controls`: `ModernNumericBox` (vi-VN grouping while typing with a stable caret, min/max clamp on leave, ↑/↓ stepping with Shift ×10, keypad decimal key → decimal comma, nullable via `AllowEmpty`), `ModernCurrencyBox` (whole đồng, `₫` suffix, `25k` → 25.000, steps of 1.000 đ) and `ModernDatePicker` (dd/MM/yyyy, accepts `19/10`, `191026`, `hôm nay`, `hôm qua`, `+3`/`-7`; ↑/↓ day, PageUp/PageDown month, F4/Alt+↓ calendar drop-down; min/max with Vietnamese error messages).
+- Added `ModernComboBox`: same rounded box, icon, placeholder and validation line as the text box, owner-drawn themed items, `DataSource`/`DisplayMember`/`ValueMember`, and in DropDown style an accent-insensitive filter-as-you-type list (best matches first, `LimitToList` for lookups vs. free text).
+- `ModernTextBox` gained `SuffixText` (unit such as `₫`, `kg`, `%`) and a clickable `TrailingGlyph` (`TrailingIconClick`); box, icon and message painting moved to a shared `InputChrome` so all inputs look identical.
+- New pure input core (`Inputs/Core`): `NumericFormat`/`NumericText` (parse "1.250.000 ₫", "25k", "1,5"/"1.5" kg; format; regroup with caret), `DateText`, `DatePresets` (Hôm nay … Năm nay, Monday-based weeks) with `DateRange`, and `TextMatch` (accent-folding search) – compiled into the Linux test project.
+- 107 new tests (Domain 135, Application 142, Infrastructure 33, UI.Controls 158 – all passing).
+
 ## 2026-10-18
 - Started the component library `GroceryPOS.UI.Controls` (net8.0-windows, builds on Linux via `EnableWindowsTargeting`): design tokens (`ColorTokens`, `TypographyTokens`, `SpacingTokens`) with built-in light ("Sáng") and dark ("Tối") themes, and `ThemeManager` (`SetMode`/`ToggleMode`, `ThemeChanged`, `Apply`/`Track` for plain WinForms controls, `IThemeable` for self-styled ones) plus `ThemeFonts` cache (Segoe UI; Segoe Fluent Icons → MDL2 fallback).
 - Added `ModernButton`: rounded, owner-drawn `Button` with Primary/Secondary/Danger/Ghost variants, hover/pressed/disabled states, keyboard focus ring and optional icon glyph (`Icons.Glyphs`); keeps `AcceptButton`/`DialogResult` behaviour.

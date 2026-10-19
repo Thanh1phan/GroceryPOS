@@ -30,7 +30,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 ## M3 – UI component library (GroceryPOS.UI.Controls)
 - [x] ThemeManager with color/font/spacing tokens, light/dark themes (WCAG-checked palettes, `Track(form)` live switching, font cache with icon-font fallback)
 - [x] Rounded buttons (primary/secondary/danger/ghost, icon glyph, focus ring), icon text box with placeholder & validation state (error/warning/valid, helper text, Enter event for scanners)
-- [ ] Combo box, numeric/currency input, date picker
+- [x] Combo box (owner-drawn, accent-insensitive filter-as-you-type, `DataSource`/`ValueMember`), numeric/currency input (live vi-VN grouping, `25k` shortcut, ↑/↓ stepping, range clamp), date picker (dd/MM/yyyy + shortcuts, calendar drop-down, min/max), date-range presets for report filters; text box gained suffix and clickable trailing icon
+- [ ] Date-range picker control (preset list + from/to) for report and list screens
 - [ ] Modern grid wrapper with paging/search/sorting
 - [ ] Card/panel, sidebar navigation, top bar, tab control, badge
 - [ ] Toast notifications, modal dialog, loading overlay

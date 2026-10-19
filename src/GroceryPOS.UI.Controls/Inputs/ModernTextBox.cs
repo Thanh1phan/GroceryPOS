@@ -23,6 +23,9 @@ public class ModernTextBox : UserControl, IThemeable
     private bool _reserveMessageSpace = true;
     private int _cornerRadius = -1;
     private int _boxHeight = -1;
+    private string? _suffixText;
+    private string? _trailingGlyph;
+    private bool _trailingHot;
 
     public ModernTextBox()
     {
@@ -56,6 +59,9 @@ public class ModernTextBox : UserControl, IThemeable
 
     /// <summary>Raised when the user presses Enter (barcode scanners send Enter after the code).</summary>
     public event EventHandler? EnterPressed;
+
+    /// <summary>Raised when the trailing icon (<see cref="TrailingGlyph"/>) is clicked.</summary>
+    public event EventHandler? TrailingIconClick;
 
     [Browsable(true)]
     [EditorBrowsable(EditorBrowsableState.Always)]
@@ -102,6 +108,40 @@ public class ModernTextBox : UserControl, IThemeable
             if (_iconGlyph != value)
             {
                 _iconGlyph = string.IsNullOrEmpty(value) ? null : value;
+                PerformLayout();
+                Invalidate();
+            }
+        }
+    }
+
+    /// <summary>Muted unit shown at the right end of the box, e.g. "₫", "kg", "%".</summary>
+    [Category("Appearance")]
+    [DefaultValue(null)]
+    public string? SuffixText
+    {
+        get => _suffixText;
+        set
+        {
+            if (_suffixText != value)
+            {
+                _suffixText = string.IsNullOrEmpty(value) ? null : value;
+                PerformLayout();
+                Invalidate();
+            }
+        }
+    }
+
+    /// <summary>Clickable icon at the right end of the box (calendar, clear, show password); raises <see cref="TrailingIconClick"/>.</summary>
+    [Category("Appearance")]
+    [DefaultValue(null)]
+    public string? TrailingGlyph
+    {
+        get => _trailingGlyph;
+        set
+        {
+            if (_trailingGlyph != value)
+            {
+                _trailingGlyph = string.IsNullOrEmpty(value) ? null : value;
                 PerformLayout();
                 Invalidate();
             }
@@ -251,18 +291,20 @@ public class ModernTextBox : UserControl, IThemeable
 
     bool IThemeable.ThemesChildren => true;
 
-    private int ScaledBoxHeight => this.ScaleDpi(_boxHeight > 0 ? _boxHeight : ThemeManager.Current.Spacing.ControlHeight);
+    /// <summary>Height of the box itself at the current DPI (without the message line).</summary>
+    protected int ScaledBoxHeight => InputChrome.BoxHeight(this, _boxHeight);
 
-    private int MessageLineHeight => _reserveMessageSpace
-        ? TextRenderer.MeasureText("Ág", ThemeFonts.Get(FontRole.Caption)).Height + this.ScaleDpi(ThemeManager.Current.Spacing.Xs)
-        : 0;
+    /// <summary>Hit area of the trailing icon, or empty when there is none.</summary>
+    protected Rectangle TrailingIconBounds =>
+        _trailingGlyph is null ? Rectangle.Empty : InputChrome.TrailingIconBounds(this, ScaledBoxHeight);
 
-    private int PreferredControlHeight => ScaledBoxHeight + MessageLineHeight;
+    private int PreferredControlHeight => ScaledBoxHeight + InputChrome.MessageLineHeight(this, _reserveMessageSpace);
 
-    private string? CurrentMessage =>
-        !string.IsNullOrWhiteSpace(_validationMessage) && _validationState != ValidationState.None
-            ? _validationMessage
-            : _helperText;
+    private string? CurrentMessage => InputChrome.MessageFor(_validationState, _validationMessage, _helperText);
+
+    private int SuffixWidth => _suffixText is null
+        ? 0
+        : TextRenderer.MeasureText(_suffixText, Font, Size.Empty, TextFormatFlags.NoPadding).Width;
 
     /// <summary>Shows an error state and message.</summary>
     public void SetError(string message)
@@ -328,6 +370,34 @@ public class ModernTextBox : UserControl, IThemeable
     {
         base.OnMouseDown(e);
         _inner.Focus();
+        if (e.Button == MouseButtons.Left && Enabled && TrailingIconBounds.Contains(e.Location))
+        {
+            OnTrailingIconClick(EventArgs.Empty);
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        SetTrailingHot(TrailingIconBounds.Contains(e.Location));
+    }
+
+    protected override void OnMouseLeave(EventArgs e)
+    {
+        base.OnMouseLeave(e);
+        SetTrailingHot(false);
+    }
+
+    protected virtual void OnTrailingIconClick(EventArgs e) => TrailingIconClick?.Invoke(this, e);
+
+    private void SetTrailingHot(bool hot)
+    {
+        if (_trailingHot != hot)
+        {
+            _trailingHot = hot;
+            Cursor = hot ? Cursors.Hand : Cursors.IBeam;
+            Invalidate(TrailingIconBounds);
+        }
     }
 
     protected override void OnEnabledChanged(EventArgs e)
@@ -372,8 +442,14 @@ public class ModernTextBox : UserControl, IThemeable
         var spacing = ThemeManager.Current.Spacing;
         var padding = this.ScaleDpi(spacing.Md);
         var left = padding + (_iconGlyph is null ? 0 : this.ScaleDpi(spacing.IconSize + spacing.Sm));
+        var right = _trailingGlyph is null ? padding : Width - TrailingIconBounds.Left;
+        if (_suffixText is not null)
+        {
+            right += SuffixWidth + this.ScaleDpi(spacing.Xs);
+        }
+
         var top = Math.Max(0, (ScaledBoxHeight - _inner.PreferredHeight) / 2);
-        _inner.SetBounds(left, top, Math.Max(0, Width - left - padding), _inner.PreferredHeight);
+        _inner.SetBounds(left, top, Math.Max(0, Width - left - right), _inner.PreferredHeight);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -389,30 +465,40 @@ public class ModernTextBox : UserControl, IThemeable
         g.Clear(BackColor);
         g.UseHighQuality();
 
-        var radius = this.ScaleDpi(_cornerRadius >= 0 ? _cornerRadius : theme.Spacing.RadiusMd);
-        var box = new RectangleF(0, 0, Width, ScaledBoxHeight);
-        var focused = _inner.Focused;
-        var borderWidth = this.ScaleDpi(focused || _validationState != ValidationState.None
-            ? theme.Spacing.FocusRingWidth
-            : theme.Spacing.BorderWidth);
-
-        g.FillRoundedRectangle(colors.Background, box, radius);
-        g.DrawRoundedRectangle(colors.Border, box, radius, borderWidth);
+        var boxHeight = ScaledBoxHeight;
+        InputChrome.PaintBox(g, this, theme, colors, boxHeight, _cornerRadius,
+            emphasized: _inner.Focused || _validationState != ValidationState.None);
 
         if (_iconGlyph is not null)
         {
-            var iconBounds = new Rectangle(this.ScaleDpi(theme.Spacing.Md), 0, this.ScaleDpi(theme.Spacing.IconSize), ScaledBoxHeight);
-            TextRenderer.DrawText(g, _iconGlyph, ThemeFonts.Icon(Font.SizeInPoints), iconBounds, colors.Icon,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            InputChrome.PaintGlyph(g, _iconGlyph, Font.SizeInPoints, InputChrome.LeadingIconBounds(this, boxHeight), colors.Icon);
         }
 
-        var message = CurrentMessage;
-        if (_reserveMessageSpace && !string.IsNullOrWhiteSpace(message))
+        var trailing = TrailingIconBounds;
+        if (_trailingGlyph is not null)
         {
-            var top = ScaledBoxHeight + this.ScaleDpi(theme.Spacing.Xxs);
-            var messageBounds = new Rectangle(this.ScaleDpi(theme.Spacing.Xs), top, Width - this.ScaleDpi(theme.Spacing.Xs), Height - top);
-            TextRenderer.DrawText(g, message, ThemeFonts.Get(FontRole.Caption), messageBounds, colors.Message,
-                TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding);
+            if (_trailingHot && Enabled)
+            {
+                var hover = Rectangle.Inflate(trailing, -this.ScaleDpi(theme.Spacing.Xxs), -this.ScaleDpi(theme.Spacing.Xs));
+                g.FillRoundedRectangle(theme.Colors.SurfaceAlt, hover, this.ScaleDpi(theme.Spacing.RadiusSm));
+            }
+
+            InputChrome.PaintGlyph(g, _trailingGlyph, Font.SizeInPoints, trailing, _trailingHot ? theme.Colors.Focus : colors.Icon);
+        }
+
+        if (_suffixText is not null)
+        {
+            var padding = this.ScaleDpi(theme.Spacing.Md);
+            var suffixRight = _trailingGlyph is null ? Width - padding : trailing.Left;
+            var width = SuffixWidth;
+            var suffixBounds = new Rectangle(suffixRight - width, 0, width, boxHeight);
+            TextRenderer.DrawText(g, _suffixText, Font, suffixBounds, Enabled ? theme.Colors.TextMuted : theme.Colors.DisabledText,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+        }
+
+        if (_reserveMessageSpace)
+        {
+            InputChrome.PaintMessage(g, this, theme, CurrentMessage, boxHeight, colors.Message);
         }
     }
 
@@ -427,7 +513,7 @@ public class ModernTextBox : UserControl, IThemeable
         }
 
         var colors = ResolveColors(theme);
-        BackColor = Parent?.BackColor is { A: 255 } parentBack ? parentBack : theme.Colors.Background;
+        BackColor = InputChrome.OuterBackColor(this, theme);
         _inner.BackColor = colors.Background;
         _inner.ForeColor = colors.Foreground;
     }

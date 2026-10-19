@@ -28,4 +28,7 @@ public static class Glyphs
     public const string Warning = "";
     public const string Completed = "";
     public const string Info = "";
+    public const string ChevronDown = "\uE70D";
+    public const string ChevronUp = "\uE70E";
+    public const string Clear = "\uE894";
 }
