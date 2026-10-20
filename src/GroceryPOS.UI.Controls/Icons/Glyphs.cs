@@ -35,4 +35,22 @@ public static class Glyphs
     public const string ChevronRight = "\uE76C";
     public const string First = "\uE892";
     public const string Last = "\uE893";
+
+    // Navigation and shell.
+    public const string Menu = "\uE700";
+    public const string Home = "\uE80F";
+    public const string Shop = "\uE719";
+    public const string People = "\uE716";
+    public const string Package = "\uE7B8";
+    public const string List = "\uE8FD";
+    public const string Document = "\uE8A5";
+    public const string History = "\uE81C";
+    public const string Calculator = "\uE8EF";
+    public const string Chart = "\uE9D2";
+    public const string Admin = "\uE7EF";
+    public const string Return = "\uE7A7";
+    public const string Bell = "\uEA8F";
+    public const string Sun = "\uE706";
+    public const string Moon = "\uE708";
+    public const string More = "\uE712";
 }

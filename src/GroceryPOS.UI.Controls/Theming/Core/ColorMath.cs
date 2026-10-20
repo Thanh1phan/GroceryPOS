@@ -72,4 +72,30 @@ public static class ColorMath
     /// <summary>Picks whichever of the two candidates reads better on <paramref name="background"/>.</summary>
     public static Color BestContrast(Color background, Color first, Color second) =>
         ContrastRatio(background, first) >= ContrastRatio(background, second) ? first : second;
+
+    /// <summary>
+    /// Returns <paramref name="foreground"/> unchanged when it already reaches <paramref name="minimum"/> contrast on
+    /// <paramref name="background"/>; otherwise moves it towards black (light backgrounds) or white (dark ones) in
+    /// small steps until it does, so tinted text keeps its hue.
+    /// </summary>
+    public static Color EnsureContrast(Color foreground, Color background, double minimum = 4.5)
+    {
+        if (ContrastRatio(foreground, background) >= minimum)
+        {
+            return foreground;
+        }
+
+        var towardsDark = RelativeLuminance(background) >= 0.18;
+        for (var step = 1; step <= 20; step++)
+        {
+            var amount = step * 0.05;
+            var candidate = towardsDark ? Darken(foreground, amount) : Lighten(foreground, amount);
+            if (ContrastRatio(candidate, background) >= minimum)
+            {
+                return candidate;
+            }
+        }
+
+        return BestContrast(background, Color.Black, Color.White);
+    }
 }
