@@ -167,15 +167,17 @@ public class ModernButton : Button, IThemeable
 
     private void DrawContent(Graphics g, Theme theme, Color foreground)
     {
-        const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter |
-                                      TextFormatFlags.NoPadding | TextFormatFlags.EndEllipsis;
+        // EndEllipsis must stay out of the MeasureText flags: combined with the unconstrained Size.Empty probe,
+        // GDI treats the zero-width box as the rectangle to ellipsize into and returns a near-empty size.
+        const TextFormatFlags measureFlags = TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+        const TextFormatFlags drawFlags = measureFlags | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis;
         var hasText = !string.IsNullOrEmpty(Text);
         var padding = this.ScaleDpi(theme.Spacing.Md);
         var gap = hasText && _iconGlyph is not null ? this.ScaleDpi(theme.Spacing.Sm) : 0;
 
         var iconFont = ThemeFonts.Icon(Font.SizeInPoints + 1f);
-        var iconSize = _iconGlyph is null ? Size.Empty : TextRenderer.MeasureText(g, _iconGlyph, iconFont, Size.Empty, flags);
-        var textSize = hasText ? TextRenderer.MeasureText(g, Text, Font, Size.Empty, flags) : Size.Empty;
+        var iconSize = _iconGlyph is null ? Size.Empty : TextRenderer.MeasureText(g, _iconGlyph, iconFont, Size.Empty, measureFlags);
+        var textSize = hasText ? TextRenderer.MeasureText(g, Text, Font, Size.Empty, measureFlags) : Size.Empty;
 
         var available = Math.Max(0, Width - (2 * padding) - iconSize.Width - gap);
         var textWidth = Math.Min(textSize.Width, available);
@@ -184,13 +186,13 @@ public class ModernButton : Button, IThemeable
 
         if (_iconGlyph is not null)
         {
-            TextRenderer.DrawText(g, _iconGlyph, iconFont, new Rectangle(x, 0, iconSize.Width, Height), foreground, flags);
+            TextRenderer.DrawText(g, _iconGlyph, iconFont, new Rectangle(x, 0, iconSize.Width, Height), foreground, drawFlags);
             x += iconSize.Width + gap;
         }
 
         if (hasText)
         {
-            var textFlags = flags | (ShowKeyboardCues ? 0 : TextFormatFlags.HidePrefix);
+            var textFlags = drawFlags | (ShowKeyboardCues ? 0 : TextFormatFlags.HidePrefix);
             TextRenderer.DrawText(g, Text, Font, new Rectangle(x, 0, textWidth, Height), foreground, textFlags);
         }
     }

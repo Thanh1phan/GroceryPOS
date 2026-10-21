@@ -1,4 +1,5 @@
 using GroceryPOS.Domain.Catalog;
+using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Partners;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -34,6 +35,18 @@ internal sealed class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Ignore(p => p.IsLowStock);
         builder.Ignore(p => p.UnitMargin);
         builder.HasAuditColumns();
+    }
+}
+
+internal sealed class PriceHistoryConfiguration : IEntityTypeConfiguration<PriceHistory>
+{
+    public void Configure(EntityTypeBuilder<PriceHistory> builder)
+    {
+        builder.ToTable("PriceHistories");
+        builder.HasOne(h => h.Product).WithMany().HasForeignKey(h => h.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.References<PriceHistory, User>(h => h.ChangedByUserId);
+        builder.Property(h => h.Note).HasMaxLength(500);
+        builder.HasIndex(h => new { h.ProductId, h.ChangedAt });
     }
 }
 

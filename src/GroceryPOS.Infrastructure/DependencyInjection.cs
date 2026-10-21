@@ -1,5 +1,6 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Infrastructure.Auditing;
+using GroceryPOS.Infrastructure.Catalog;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Repositories;
@@ -35,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<IPriceHistoryRepository, PriceHistoryRepository>();
+        services.AddScoped<IProductImportExportService, ClosedXmlProductImportExportService>();
         services.AddScoped<ICustomerRepository, CustomerRepository>();
         services.AddScoped<ISupplierRepository, SupplierRepository>();
         services.AddScoped<ISaleRepository, SaleRepository>();

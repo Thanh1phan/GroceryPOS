@@ -43,6 +43,14 @@ public static class AuditActions
     public const string SaleVoided = "sale.voided";
     public const string SaleReturned = "sale.returned";
     public const string PriceChanged = "product.price_changed";
+    public const string CategoryCreated = "category.created";
+    public const string CategoryUpdated = "category.updated";
+    public const string CategoryStatusChanged = "category.status_changed";
+    public const string ProductCreated = "product.created";
+    public const string ProductUpdated = "product.updated";
+    public const string ProductStatusChanged = "product.status_changed";
+    public const string ProductImported = "product.imported";
+    public const string ProductExported = "product.exported";
     public const string StockAdjusted = "inventory.adjusted";
     public const string StockCounted = "inventory.counted";
     public const string GoodsReceived = "purchase.received";

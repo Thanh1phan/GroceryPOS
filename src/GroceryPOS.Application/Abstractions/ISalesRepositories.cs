@@ -25,6 +25,16 @@ public interface ICategoryRepository : IRepository<Category>
 {
 }
 
+public interface IPriceHistoryRepository : IRepository<PriceHistory>
+{
+    /// <summary>
+    /// Price changes of one product, newest first, optionally limited to
+    /// <paramref name="from"/> (inclusive) .. <paramref name="to"/> (exclusive).
+    /// </summary>
+    Task<IReadOnlyList<PriceHistory>> ListByProductAsync(
+        int productId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default);
+}
+
 public interface ICustomerRepository : IRepository<Customer>
 {
     Task<Customer?> GetByPhoneAsync(string normalizedPhone, CancellationToken cancellationToken = default);

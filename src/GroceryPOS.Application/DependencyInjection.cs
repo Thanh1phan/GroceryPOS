@@ -1,6 +1,7 @@
 using FluentValidation;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Authentication;
+using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Purchasing;
@@ -41,6 +42,10 @@ public static class DependencyInjection
         services.AddScoped<ISupplierPaymentService, SupplierPaymentService>();
         services.AddScoped<ISupplierReturnService, SupplierReturnService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IPriceHistoryService, PriceHistoryService>();
+        services.AddScoped<IProductImportExportAppService, ProductImportExportService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton, includeInternalTypes: false);
         return services;

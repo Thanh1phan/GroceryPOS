@@ -99,6 +99,53 @@ namespace GroceryPOS.Infrastructure.Persistence.Migrations.Sqlite
                     b.ToTable("Categories", (string)null);
                 });
 
+            modelBuilder.Entity("GroceryPOS.Domain.Catalog.PriceHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ChangedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ChangedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("NewCostPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("NewSellPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("OldCostPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("OldSellPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("ProductId", "ChangedAt");
+
+                    b.ToTable("PriceHistories", (string)null);
+                });
+
             modelBuilder.Entity("GroceryPOS.Domain.Catalog.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -1260,6 +1307,22 @@ namespace GroceryPOS.Infrastructure.Persistence.Migrations.Sqlite
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("Shifts", (string)null);
+                });
+
+            modelBuilder.Entity("GroceryPOS.Domain.Catalog.PriceHistory", b =>
+                {
+                    b.HasOne("GroceryPOS.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("GroceryPOS.Domain.Catalog.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("GroceryPOS.Domain.Catalog.Product", b =>

@@ -153,6 +153,19 @@ internal sealed class InMemoryCategoryRepository : InMemoryRepository<Category>,
 {
 }
 
+internal sealed class InMemoryPriceHistoryRepository : InMemoryRepository<PriceHistory>, IPriceHistoryRepository
+{
+    public Task<IReadOnlyList<PriceHistory>> ListByProductAsync(
+        int productId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PriceHistory>>(Items
+            .Where(h => h.ProductId == productId
+                && (from is null || h.ChangedAt >= from)
+                && (to is null || h.ChangedAt < to))
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .ToList());
+}
+
 internal sealed class InMemoryShiftRepository : InMemoryRepository<Shift>, IShiftRepository
 {
     public Task<Shift?> GetOpenByUserAsync(int userId, CancellationToken cancellationToken = default) =>

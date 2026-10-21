@@ -86,6 +86,33 @@ internal sealed class ProductRepository : EfRepository<Product>, IProductReposit
             .ToListAsync(cancellationToken);
 }
 
+internal sealed class PriceHistoryRepository : EfRepository<PriceHistory>, IPriceHistoryRepository
+{
+    public PriceHistoryRepository(GroceryDbContext context) : base(context)
+    {
+    }
+
+    public async Task<IReadOnlyList<PriceHistory>> ListByProductAsync(
+        int productId,
+        DateTimeOffset? from = null,
+        DateTimeOffset? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        var query = Set.Where(h => h.ProductId == productId);
+        if (from is { } start)
+        {
+            query = query.Where(h => h.ChangedAt >= start);
+        }
+
+        if (to is { } end)
+        {
+            query = query.Where(h => h.ChangedAt < end);
+        }
+
+        return await query.OrderByDescending(h => h.ChangedAt).ThenByDescending(h => h.Id).ToListAsync(cancellationToken);
+    }
+}
+
 internal sealed class CustomerRepository : EfRepository<Customer>, ICustomerRepository
 {
     public CustomerRepository(GroceryDbContext context) : base(context)

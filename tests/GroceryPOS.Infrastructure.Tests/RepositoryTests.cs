@@ -150,6 +150,43 @@ public sealed class RepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task PriceHistory_lists_by_product_newest_first_within_range()
+    {
+        int productId;
+        await using (var context = _db.CreateContext())
+        {
+            var category = new Category("Tạp hóa");
+            context.Categories.Add(category);
+            await context.SaveChangesAsync();
+
+            var product = new Product("SUA01", "Sữa tươi Vinamilk 1L", category.Id, "hộp", 10_000, 12_000);
+            context.Products.Add(product);
+            await context.SaveChangesAsync();
+            productId = product.Id;
+
+            var change1 = product.ChangePrices(11_000, 13_000);
+            context.PriceHistories.Add(PriceHistory.From(
+                product, change1, new DateTimeOffset(2026, 10, 1, 8, 0, 0, Vietnam), null, PriceChangeSource.ManualEdit)!);
+
+            var change2 = product.ChangePrices(12_000, 14_000);
+            context.PriceHistories.Add(PriceHistory.From(
+                product, change2, new DateTimeOffset(2026, 10, 10, 8, 0, 0, Vietnam), null, PriceChangeSource.GoodsReceipt)!);
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = _db.CreateContext())
+        {
+            var history = new PriceHistoryRepository(context);
+            var all = await history.ListByProductAsync(productId);
+            Assert.Equal(new[] { 12_000m, 11_000m }, all.Select(h => h.NewCostPrice));
+
+            var limited = await history.ListByProductAsync(
+                productId, from: new DateTimeOffset(2026, 10, 5, 0, 0, 0, Vietnam));
+            Assert.Equal(12_000m, Assert.Single(limited).NewCostPrice);
+        }
+    }
+
+    [Fact]
     public async Task Customer_is_found_by_normalized_phone()
     {
         await using (var context = _db.CreateContext())

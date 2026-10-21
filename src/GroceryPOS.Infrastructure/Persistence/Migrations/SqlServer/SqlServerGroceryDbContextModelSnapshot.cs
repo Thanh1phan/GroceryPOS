@@ -108,6 +108,55 @@ namespace GroceryPOS.Infrastructure.Persistence.Migrations.SqlServer
                     b.ToTable("Categories", (string)null);
                 });
 
+            modelBuilder.Entity("GroceryPOS.Domain.Catalog.PriceHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("ChangedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("ChangedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("NewCostPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("NewSellPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("OldCostPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("OldSellPrice")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("ProductId", "ChangedAt");
+
+                    b.ToTable("PriceHistories", (string)null);
+                });
+
             modelBuilder.Entity("GroceryPOS.Domain.Catalog.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -1306,6 +1355,22 @@ namespace GroceryPOS.Infrastructure.Persistence.Migrations.SqlServer
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("Shifts", (string)null);
+                });
+
+            modelBuilder.Entity("GroceryPOS.Domain.Catalog.PriceHistory", b =>
+                {
+                    b.HasOne("GroceryPOS.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("GroceryPOS.Domain.Catalog.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("GroceryPOS.Domain.Catalog.Product", b =>

@@ -1,4 +1,5 @@
 using GroceryPOS.Application.Authentication;
+using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Sales;
@@ -207,5 +208,47 @@ public sealed class ValidatorTests
 
         Assert.True(failure.IsFailure);
         Assert.Equal("Tiền đầu ca phải là số tiền chẵn đồng.", failure.Error.Message);
+    }
+
+    [Fact]
+    public void Save_category_requires_name()
+    {
+        Assert.Equal("Tên danh mục không được để trống.",
+            new SaveCategoryRequestValidator().Validate(new SaveCategoryRequest(" ", null)).ToError().Message);
+        Assert.True(new SaveCategoryRequestValidator().Validate(new SaveCategoryRequest("Đồ uống", "Nước giải khát")).IsValid);
+    }
+
+    [Theory]
+    [InlineData("", "SP01", 1, "cái", 10_000, 12_000, 5, "Tên sản phẩm không được để trống.")]
+    [InlineData("Sữa", "", 1, "cái", 10_000, 12_000, 5, "Mã sản phẩm không được để trống.")]
+    [InlineData("Sữa", "SP01", 0, "cái", 10_000, 12_000, 5, "Vui lòng chọn danh mục.")]
+    [InlineData("Sữa", "SP01", 1, "", 10_000, 12_000, 5, "Đơn vị tính không được để trống.")]
+    [InlineData("Sữa", "SP01", 1, "cái", -1, 12_000, 5, "Giá vốn không được âm.")]
+    [InlineData("Sữa", "SP01", 1, "cái", 10_000, 12_000.5, 5, "Giá bán phải là số tiền chẵn đồng.")]
+    [InlineData("Sữa", "SP01", 1, "cái", 10_000, 12_000, 7, "Thuế suất VAT không hợp lệ (0, 5, 8 hoặc 10%).")]
+    public void Save_product_rejects_invalid_fields(
+        string name, string code, int categoryId, string unit, decimal cost, decimal sell, decimal vat, string expected)
+    {
+        var request = new SaveProductRequest(code, null, name, categoryId, unit, cost, sell, vat, 0);
+        Assert.Equal(expected, new SaveProductRequestValidator().Validate(request).ToError().Message);
+    }
+
+    [Fact]
+    public void Save_product_rejects_invalid_barcode_and_negative_min_stock()
+    {
+        var validator = new SaveProductRequestValidator();
+        var request = new SaveProductRequest("SP01", "not-a-barcode!", "Sữa", 1, "cái", 10_000, 12_000, 5, -1);
+
+        var fields = validator.Validate(request).ToFieldErrors();
+
+        Assert.Contains("Mã vạch không hợp lệ.", fields["Barcode"]);
+        Assert.Contains("Mức tồn tối thiểu không được âm.", fields["MinStockLevel"]);
+    }
+
+    [Fact]
+    public void Save_product_passes_with_valid_fields()
+    {
+        var request = new SaveProductRequest("SP01", "8934673000017", "Sữa tươi Vinamilk 1L", 1, "hộp", 10_000, 12_000, 5, 10);
+        Assert.True(new SaveProductRequestValidator().Validate(request).IsValid);
     }
 }
