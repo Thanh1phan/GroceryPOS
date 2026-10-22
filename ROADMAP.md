@@ -21,11 +21,12 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 
 ## M2 – Authentication & authorization
 - [x] AuthService: login, lockout after failed attempts, change password, logout (application layer)
-- [ ] Login form, change-password dialog, session in app shell
-- [ ] Permission-aware menus/buttons
+- [x] Login form, change-password dialog (mandatory on first sign-in), session in app shell (`GroceryPOS.App`)
+- [x] Permission-aware menus/buttons (sidebar filtered by permission, screen buttons disabled)
 - [ ] User management screen (create, edit, reset password, unlock, activate/deactivate)
 - [ ] Role management screen (permission matrix)
-- [ ] Global exception handling + Serilog wiring in WinForms host
+- [ ] Move the WinForms screens to MVP (Presenter + IView) once the base classes exist
+- [x] Global exception handling + Serilog wiring in WinForms host (synchronous STA `Main`)
 
 ## M3 – UI component library (GroceryPOS.UI.Controls)
 - [x] ThemeManager with color/font/spacing tokens, light/dark themes (WCAG-checked palettes, `Track(form)` live switching, font cache with icon-font fallback)
@@ -38,10 +39,10 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [ ] BaseForm / BaseUserControl / BaseListView / BaseEditDialog
 
 ## M4 – Master data
-- [ ] Categories CRUD
-- [ ] Products CRUD (barcode, unit, prices, VAT, min stock) with price-change audit
-- [ ] Suppliers CRUD
-- [ ] Customers CRUD + loyalty points history
+- [x] Categories CRUD
+- [x] Products CRUD (barcode, unit, prices, VAT, min stock) with price-change audit, price history, Excel import/export
+- [x] Suppliers CRUD (`NCC0001` auto codes, MST validation, debt shown, cannot stop trading while debt is open)
+- [x] Customers CRUD + loyalty points history (`KH000001` codes, unique phone, purchases/returns/voids replayed with running balance)
 
 ## M5 – Point of sale
 - [x] Sale/SaleLine domain (discounts per line and per invoice, VAT split, payments)

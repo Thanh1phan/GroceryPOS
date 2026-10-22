@@ -38,6 +38,9 @@ public interface IPriceHistoryRepository : IRepository<PriceHistory>
 public interface ICustomerRepository : IRepository<Customer>
 {
     Task<Customer?> GetByPhoneAsync(string normalizedPhone, CancellationToken cancellationToken = default);
+
+    /// <summary>All customer codes starting with <paramref name="prefix"/> (for the next <c>KH000001</c> code).</summary>
+    Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 }
 
 public interface ISaleRepository : IRepository<Sale>
@@ -69,6 +72,9 @@ public interface ISaleRepository : IRepository<Sale>
     /// </summary>
     Task<IReadOnlyList<Sale>> ListCompletedInPeriodAsync(
         DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
+
+    /// <summary>Completed (incl. later voided) sales of one customer, oldest first. Drafts are left out.</summary>
+    Task<IReadOnlyList<Sale>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default);
 }
 
 public interface ISaleReturnRepository : IRepository<SaleReturn>
@@ -89,4 +95,7 @@ public interface ISaleReturnRepository : IRepository<SaleReturn>
     /// <summary>Returns (with lines) of all users with <see cref="SaleReturn.ReturnedAt"/> in [<paramref name="from"/>, <paramref name="to"/>).</summary>
     Task<IReadOnlyList<SaleReturn>> ListInPeriodAsync(
         DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns made by one customer, oldest first.</summary>
+    Task<IReadOnlyList<SaleReturn>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default);
 }

@@ -8,6 +8,9 @@ internal sealed class InMemorySupplierRepository : InMemoryRepository<Supplier>,
 {
     public Task<Supplier?> GetByCodeAsync(string code, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(s => s.Code == code));
+
+    public Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Items.Select(s => s.Code).Where(c => c.StartsWith(prefix, StringComparison.Ordinal)).ToList());
 }
 
 internal sealed class InMemoryGoodsReceiptRepository : InMemoryRepository<GoodsReceipt>, IGoodsReceiptRepository

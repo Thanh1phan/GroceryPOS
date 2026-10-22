@@ -13,8 +13,10 @@ namespace GroceryPOS.App;
 
 internal static class Program
 {
+    // Synchronous on purpose: with "async Task Main" the code after the first await runs on a thread-pool (MTA)
+    // thread, so the forms would be created off the [STAThread] UI thread (clipboard, drag & drop and dialogs break).
     [STAThread]
-    private static async Task Main()
+    private static void Main()
     {
         ApplicationConfiguration.Initialize();
         System.Windows.Forms.Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -37,7 +39,7 @@ internal static class Program
         using (var scope = provider.CreateScope())
         {
             var initializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
-            await initializer.InitializeAsync();
+            initializer.InitializeAsync().GetAwaiter().GetResult();
         }
 
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();

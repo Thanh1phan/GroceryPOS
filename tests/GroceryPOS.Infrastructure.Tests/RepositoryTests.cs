@@ -202,6 +202,48 @@ public sealed class RepositoryTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Partner_codes_with_prefix_and_sales_by_customer()
+    {
+        int customerId;
+        await using (var context = _db.CreateContext())
+        {
+            var (cashier, product) = await SeedCashierAndProductAsync(context);
+            var member = new Customer("KH000002", "Nguyễn Văn An");
+            context.Customers.AddRange(member, new Customer("KH000010", "B"), new Customer("VIP01", "C"));
+            context.Suppliers.AddRange(new Supplier("NCC0001", "Vinamilk"), new Supplier("ncc-bia", "Bia"), new Supplier("ABC", "Khác"));
+            await context.SaveChangesAsync();
+            customerId = member.Id;
+
+            var at = new DateTimeOffset(2026, 10, 16, 10, 0, 0, Vietnam);
+            var draft = new Sale("HD261016-0001", cashier.Id, at);
+            draft.AttachCustomer(member);
+            context.Sales.Add(draft);
+            foreach (var (code, time) in new[] { ("HD261016-0003", at.AddHours(2)), ("HD261016-0002", at.AddHours(1)) })
+            {
+                var sale = new Sale(code, cashier.Id, time);
+                sale.AttachCustomer(member);
+                sale.AddItem(product, 1);
+                sale.AddPayment(PaymentMethod.Cash, sale.Total);
+                sale.Complete(time, LoyaltyPolicy.Default);
+                context.Sales.Add(sale);
+            }
+
+            AddSale(context, "HD261016-0004", cashier.Id, product, at); // walk-in customer
+            await context.SaveChangesAsync();
+        }
+
+        await using (var context = _db.CreateContext())
+        {
+            Assert.Equal(new[] { "KH000002", "KH000010" }, (await new CustomerRepository(context).ListCodesWithPrefixAsync("kh")).Order());
+            Assert.Equal(new[] { "NCC-BIA", "NCC0001" }, (await new SupplierRepository(context).ListCodesWithPrefixAsync("NCC")).Order(StringComparer.Ordinal));
+
+            var sales = await new SaleRepository(context).ListByCustomerAsync(customerId);
+            Assert.Equal(new[] { "HD261016-0002", "HD261016-0003" }, sales.Select(s => s.Code)); // draft skipped, oldest first
+            Assert.Empty(await new SaleReturnRepository(context).ListByCustomerAsync(customerId));
+        }
+    }
+
     private async Task<int[]> SeedProductsAsync()
     {
         await using var context = _db.CreateContext();

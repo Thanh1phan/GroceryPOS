@@ -4,6 +4,7 @@ using GroceryPOS.Application.Authentication;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Inventory;
+using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Sales;
@@ -46,6 +47,8 @@ public static class DependencyInjection
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IPriceHistoryService, PriceHistoryService>();
         services.AddScoped<IProductImportExportAppService, ProductImportExportService>();
+        services.AddScoped<ISupplierService, SupplierService>();
+        services.AddScoped<ICustomerService, CustomerService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton, includeInternalTypes: false);
         return services;

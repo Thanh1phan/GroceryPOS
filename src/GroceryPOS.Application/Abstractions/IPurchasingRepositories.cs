@@ -7,6 +7,9 @@ public interface ISupplierRepository : IRepository<Supplier>
 {
     /// <summary>Finds a supplier by its code (stored upper-case).</summary>
     Task<Supplier?> GetByCodeAsync(string code, CancellationToken cancellationToken = default);
+
+    /// <summary>All supplier codes starting with <paramref name="prefix"/> (for the next <c>NCC0001</c> code).</summary>
+    Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default);
 }
 
 public sealed record GoodsReceiptFilter(

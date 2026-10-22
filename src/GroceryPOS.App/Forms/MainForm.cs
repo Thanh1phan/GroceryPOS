@@ -37,7 +37,7 @@ public sealed class MainForm : Form
         new NavSection("Đối tác", new[]
         {
             new NavItem("customers", "Khách hàng", Glyphs.People, new[] { Permissions.CustomersView }),
-            new NavItem("suppliers", "Nhà cung cấp", Glyphs.People, new[] { Permissions.SuppliersManage }),
+            new NavItem("suppliers", "Nhà cung cấp", Glyphs.People, new[] { Permissions.SuppliersManage, Permissions.PurchasesManage, Permissions.SupplierPaymentsManage }),
         }),
         new NavSection("Báo cáo & Hệ thống", new[]
         {
@@ -127,6 +127,8 @@ public sealed class MainForm : Form
             "dashboard" => BuildDashboard(),
             "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
+            "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
+            "suppliers" => new SupplierListScreen(_scopeFactory, _currentUser),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;

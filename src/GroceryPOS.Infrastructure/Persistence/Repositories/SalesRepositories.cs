@@ -39,6 +39,12 @@ internal sealed class SaleRepository : EfRepository<Sale>, ISaleRepository
             .OrderBy(s => s.CompletedAt).ThenBy(s => s.Id)
             .AsSplitQuery()
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Sale>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default) =>
+        await Set.Where(s => s.CustomerId == customerId && s.CompletedAt != null)
+            .OrderBy(s => s.CompletedAt).ThenBy(s => s.Id)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
 }
 
 internal sealed class SaleReturnRepository : EfRepository<SaleReturn>, ISaleReturnRepository
@@ -70,6 +76,11 @@ internal sealed class SaleReturnRepository : EfRepository<SaleReturn>, ISaleRetu
     public async Task<IReadOnlyList<SaleReturn>> ListInPeriodAsync(
         DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
         await Set.Where(r => r.ReturnedAt >= from && r.ReturnedAt < to)
+            .OrderBy(r => r.ReturnedAt).ThenBy(r => r.Id)
+            .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<SaleReturn>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default) =>
+        await Set.Where(r => r.CustomerId == customerId)
             .OrderBy(r => r.ReturnedAt).ThenBy(r => r.Id)
             .ToListAsync(cancellationToken);
 }

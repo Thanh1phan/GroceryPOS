@@ -3,6 +3,8 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <RootNamespace>GroceryPOS.App</RootNamespace>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- Lets the app build on Linux/macOS CI; it still only runs on Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <OutputType>WinExe</OutputType>
     <ApplicationIcon />
     <ImplicitUsings>enable</ImplicitUsings>

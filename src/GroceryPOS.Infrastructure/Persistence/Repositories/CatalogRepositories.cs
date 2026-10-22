@@ -121,6 +121,12 @@ internal sealed class CustomerRepository : EfRepository<Customer>, ICustomerRepo
 
     public Task<Customer?> GetByPhoneAsync(string normalizedPhone, CancellationToken cancellationToken = default) =>
         Set.FirstOrDefaultAsync(c => c.Phone == normalizedPhone, cancellationToken);
+
+    public async Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        var normalized = prefix.Trim().ToUpperInvariant();
+        return await Set.Where(c => c.Code.StartsWith(normalized)).Select(c => c.Code).ToListAsync(cancellationToken);
+    }
 }
 
 internal sealed class SupplierRepository : EfRepository<Supplier>, ISupplierRepository
@@ -133,5 +139,11 @@ internal sealed class SupplierRepository : EfRepository<Supplier>, ISupplierRepo
     {
         var normalized = code.Trim().ToUpperInvariant();
         return Set.FirstOrDefaultAsync(s => s.Code == normalized, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default)
+    {
+        var normalized = prefix.Trim().ToUpperInvariant();
+        return await Set.Where(s => s.Code.StartsWith(normalized)).Select(s => s.Code).ToListAsync(cancellationToken);
     }
 }

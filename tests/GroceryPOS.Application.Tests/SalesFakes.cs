@@ -80,6 +80,9 @@ internal sealed class InMemoryCustomerRepository : InMemoryRepository<Customer>,
 {
     public Task<Customer?> GetByPhoneAsync(string normalizedPhone, CancellationToken cancellationToken = default) =>
         Task.FromResult(Items.FirstOrDefault(c => c.Phone == normalizedPhone));
+
+    public Task<IReadOnlyList<string>> ListCodesWithPrefixAsync(string prefix, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<string>>(Items.Select(c => c.Code).Where(c => c.StartsWith(prefix, StringComparison.Ordinal)).ToList());
 }
 
 internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRepository
@@ -121,6 +124,12 @@ internal sealed class InMemorySaleRepository : InMemoryRepository<Sale>, ISaleRe
     public Task<IReadOnlyList<Sale>> ListCompletedInPeriodAsync(
         DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<Sale>>(Items.Where(s => s.CompletedAt >= from && s.CompletedAt < to).ToList());
+
+    public Task<IReadOnlyList<Sale>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Sale>>(Items
+            .Where(s => s.CustomerId == customerId && s.CompletedAt != null)
+            .OrderBy(s => s.CompletedAt).ThenBy(s => s.Id)
+            .ToList());
 }
 
 internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleReturn>, ISaleReturnRepository
@@ -147,6 +156,9 @@ internal sealed class InMemorySaleReturnRepository : InMemoryRepository<SaleRetu
     public Task<IReadOnlyList<SaleReturn>> ListInPeriodAsync(
         DateTimeOffset from, DateTimeOffset to, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<SaleReturn>>(Items.Where(r => r.ReturnedAt >= from && r.ReturnedAt < to).ToList());
+
+    public Task<IReadOnlyList<SaleReturn>> ListByCustomerAsync(int customerId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SaleReturn>>(Items.Where(r => r.CustomerId == customerId).OrderBy(r => r.ReturnedAt).ThenBy(r => r.Id).ToList());
 }
 
 internal sealed class InMemoryCategoryRepository : InMemoryRepository<Category>, ICategoryRepository

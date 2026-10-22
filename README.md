@@ -10,10 +10,10 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases (auth, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
+  GroceryPOS.Application     Use cases (auth, catalog, customers & suppliers, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
   GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding, Serilog file logging
   GroceryPOS.UI.Controls     Themed WinForms component library: design tokens, light/dark ThemeManager, ModernButton, ModernTextBox, ModernNumericBox/ModernCurrencyBox, ModernDatePicker, ModernComboBox, ModernDataGrid, ModernCard/StatCard, ModernBadge, SidebarNav, TopBar, ModernTabControl (in progress)
-  GroceryPOS.WinForms        App shell, MVP views & presenters, DI host                        (planned)
+  GroceryPOS.App             WinForms app: DI host, login/change password, shell (sidebar + top bar), screens for categories, products, customers (+ loyalty history), suppliers
 tests/
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
   GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
@@ -37,16 +37,20 @@ Conventions:
 - Lists: use `ModernDataGrid`. Add columns with `AddTextColumn("Name", "Tên hàng")` (width 0 = fill), `AddMoneyColumn`, `AddNumberColumn`, `AddDateColumn`, `AddCheckColumn` (dotted paths like `Category.Name` work), put screen buttons in `ToolbarItems`, then either `SetItems(rows)` for in-memory search/sort/paging or set `DataProvider = (query, ct) => …` to return a `GridPage<object>` per `GridQuery` for large tables. Handle `RowActivated` to open the edit dialog.
 - Shell: `SidebarNav` takes a `NavMenu` of `NavSection`s/`NavItem`s (key, Vietnamese text, glyph, required permissions – any one is enough, optional shortcut hint); set `PermissionFilter = currentUser.HasPermission` after sign-in so items the user may not open are hidden, handle `ItemSelected` to open the screen, `SetBadge("inventory", lowStockCount, BadgeKind.Warning)` for counts. `TopBar.SetPage(title, breadcrumb)` and `SetUser(fullName, roleName, username)`; give it a `UserMenu` (Đổi mật khẩu, Đăng xuất) and put screen buttons in `Actions`. Its theme toggle calls `ThemeManager.ToggleMode()` and raises `ThemeToggled` so the shell can save the choice.
 - Surfaces: `ModernCard` (title/subtitle/icon header, children docked below it) for grouped content, `StatCard` for dashboard KPIs (`Value = Money.Format(x)`, `SetTrend(dto.RevenueChangePercent, "hôm qua")`, `HigherIsBetter = false` for refunds), `ModernBadge.Set("Hết hàng", BadgeKind.Danger)` for statuses, `ModernTabControl` with `ModernTabPage`s (`BadgeCount`, cancelable `Selecting` for unsaved edits).
+- Master data codes: customers get `KH000001`, suppliers `NCC0001` (or a typed code) via `Common.SequentialCode`; codes never change after creation. A customer's phone is unique (it is the member lookup at the counter). A supplier with open debt cannot be set to "ngừng giao dịch".
 - Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
 
 ## Build & run
 
-Requirements: .NET 8 SDK (the WinForms app will require Windows to run).
+Requirements: .NET 8 SDK. The WinForms projects build anywhere (`EnableWindowsTargeting`) but the app runs on Windows only.
 
 ```bash
 dotnet build GroceryPOS.sln
 dotnet test GroceryPOS.sln
+dotnet run --project src/GroceryPOS.App      # Windows
 ```
+
+First start creates `grocerypos.db` (SQLite) next to the app and the default account **`admin` / `admin123`**, which must be changed at the first sign-in.
 
 ## Database
 

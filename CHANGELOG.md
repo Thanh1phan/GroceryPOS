@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-22
+- Added supplier management (`Application.Partners.SupplierService`): list (open to `suppliers.manage`, `purchases.manage` and `suppliers.pay` so receipts and payments can pick from it), create with automatic `NCC0001` codes or a typed code (unique), update (code never changes), stop/resume trading – refused while the store still owes the supplier money. Audited as `supplier.created/updated/status_changed`.
+- Added customer management (`CustomerService`): `KH000001` codes, phone normalized and unique (it is the POS member lookup), deactivate keeps points, and a loyalty history that replays purchases, returns and voids with the real balance after each entry (reversals stop at zero; points no document explains show as an opening line). Audited as `customer.*`.
+- New screens in `GroceryPOS.App`: Nhà cung cấp (list with debt column, add/edit dialog with MST check), Khách hàng (list, add/edit dialog, "Lịch sử điểm" window with KPI cards); FluentValidation for both requests (VN phone, email, 10/13-digit tax code).
+- Fixes: the app's `Main` is synchronous again so forms are created on the STA UI thread (code after `await` in an `async Main` ran on an MTA pool thread); `GroceryPOS.App` builds on Linux CI (`EnableWindowsTargeting`).
+- 32 new tests (Domain 139, Application 206, Infrastructure 35, UI.Controls 272 – all passing).
+
 ## 2026-10-20
 - Added shell navigation to `GroceryPOS.UI.Controls`: `SidebarNav` (brand header with collapse button, titled sections, icon + text + shortcut hint, solid count badges, brand-tinted selection with accent bar, icon-only collapsed mode with tooltips and section separators, wheel scrolling, ↑/↓/Home/End/Enter) driven by a `NavMenu` that hides items the user has no permission for (any-of permissions, empty sections dropped), and `TopBar` (title + breadcrumb, screen `Actions` slot, notification bell with count, light/dark toggle, user chip with Vietnamese initials avatar, name, role and `UserMenu`).
 - Added `ModernTabControl`/`ModernTabPage`: flat underlined tabs with icon and count badge, overflow arrows that always keep the selected tab in view, cancelable `Selecting` (unsaved changes), Ctrl+Tab / Ctrl+Shift+Tab and ←/→/Home/End.
