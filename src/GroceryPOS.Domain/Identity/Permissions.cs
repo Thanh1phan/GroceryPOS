@@ -64,7 +64,23 @@ public static class Permissions
         [SettingsManage] = "Cấu hình hệ thống",
     };
 
+    /// <summary>
+    /// Permissions grouped by area, in the order the role editor shows them. Every key appears in exactly one group.
+    /// </summary>
+    public static IReadOnlyList<PermissionGroup> Groups { get; } = new[]
+    {
+        new PermissionGroup("Hệ thống", new[] { DashboardView, UsersView, UsersManage, RolesManage, AuditLogView, SettingsManage }),
+        new PermissionGroup("Hàng hóa", new[] { CategoriesManage, ProductsView, ProductsManage, PricesChange }),
+        new PermissionGroup("Đối tác", new[] { CustomersView, CustomersManage, SuppliersManage, SupplierPaymentsManage }),
+        new PermissionGroup("Bán hàng", new[] { SalesCreate, SalesDiscount, SalesVoid, ReturnsCreate, ShiftsManage, ShiftsSupervise }),
+        new PermissionGroup("Kho & nhập hàng", new[] { PurchasesManage, InventoryView, InventoryAdjust }),
+        new PermissionGroup("Báo cáo", new[] { ReportsView }),
+    };
+
     public static IReadOnlyCollection<string> All => (IReadOnlyCollection<string>)DisplayNames.Keys;
 
     public static bool IsKnown(string permission) => DisplayNames.ContainsKey(permission);
 }
+
+/// <summary>A titled set of permission keys shown together in the role editor.</summary>
+public sealed record PermissionGroup(string Title, IReadOnlyList<string> Keys);

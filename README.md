@@ -10,10 +10,10 @@ Point-of-sale and store management app for a Vietnamese grocery store.
 ```
 src/
   GroceryPOS.Domain          Entities, value objects, domain rules (no dependencies)
-  GroceryPOS.Application     Use cases (auth, catalog, customers & suppliers, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
+  GroceryPOS.Application     Use cases (auth, users & roles, catalog, customers & suppliers, checkout/void, returns, shifts, POS lookup, inventory, goods receipts, supplier payments & returns, reports & dashboard), DTOs, interfaces, Result pattern, FluentValidation validators, `AddApplication()` DI
   GroceryPOS.Infrastructure  EF Core 8 DbContext (SQLite default / SQL Server), migrations per provider, repositories, audit log, BCrypt, start-up seeding, Serilog file logging
   GroceryPOS.UI.Controls     Themed WinForms component library: design tokens, light/dark ThemeManager, ModernButton, ModernTextBox, ModernNumericBox/ModernCurrencyBox, ModernDatePicker, ModernComboBox, ModernDataGrid, ModernCard/StatCard, ModernBadge, SidebarNav, TopBar, ModernTabControl (in progress)
-  GroceryPOS.App             WinForms app: DI host, login/change password, shell (sidebar + top bar), screens for categories, products, customers (+ loyalty history), suppliers
+  GroceryPOS.App             WinForms app: DI host, login/change password, shell (sidebar + top bar), screens for categories, products, customers (+ loyalty history), suppliers, users, roles & permissions (matrix)
 tests/
   GroceryPOS.Domain.Tests    Domain tests (identity, catalog, partners, sales, returns, shifts, stock ledger, purchasing)
   GroceryPOS.Application.Tests  Application tests (auth, checkout, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
@@ -38,7 +38,8 @@ Conventions:
 - Shell: `SidebarNav` takes a `NavMenu` of `NavSection`s/`NavItem`s (key, Vietnamese text, glyph, required permissions – any one is enough, optional shortcut hint); set `PermissionFilter = currentUser.HasPermission` after sign-in so items the user may not open are hidden, handle `ItemSelected` to open the screen, `SetBadge("inventory", lowStockCount, BadgeKind.Warning)` for counts. `TopBar.SetPage(title, breadcrumb)` and `SetUser(fullName, roleName, username)`; give it a `UserMenu` (Đổi mật khẩu, Đăng xuất) and put screen buttons in `Actions`. Its theme toggle calls `ThemeManager.ToggleMode()` and raises `ThemeToggled` so the shell can save the choice.
 - Surfaces: `ModernCard` (title/subtitle/icon header, children docked below it) for grouped content, `StatCard` for dashboard KPIs (`Value = Money.Format(x)`, `SetTrend(dto.RevenueChangePercent, "hôm qua")`, `HigherIsBetter = false` for refunds), `ModernBadge.Set("Hết hàng", BadgeKind.Danger)` for statuses, `ModernTabControl` with `ModernTabPage`s (`BadgeCount`, cancelable `Selecting` for unsaved edits).
 - Master data codes: customers get `KH000001`, suppliers `NCC0001` (or a typed code) via `Common.SequentialCode`; codes never change after creation. A customer's phone is unique (it is the member lookup at the counter). A supplier with open debt cannot be set to "ngừng giao dịch".
-- Authorization is permission-based (`Domain.Identity.Permissions`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho.
+- Authorization is permission-based (`Domain.Identity.Permissions`, grouped by area in `Permissions.Groups`); built-in roles: Admin, Quản lý, Thu ngân, Thủ kho. Admin always holds every permission; other roles (and new custom roles) are edited in the **Phân quyền** matrix. Permission changes apply at the next sign-in.
+- Accounts: an administrator creates users with a temporary password (the user must change it at the first sign-in) and can reset passwords, unlock and stop accounts; accounts are never deleted. A user can only assign or manage roles whose permissions they all hold, nobody can change their own role or stop their own account, and the last active account able to manage roles is protected. Usernames are 3–50 unaccented letters, digits, `.`, `_`, `-`.
 
 ## Build & run
 

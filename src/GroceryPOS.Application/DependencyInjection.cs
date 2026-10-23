@@ -9,6 +9,7 @@ using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Shifts;
+using GroceryPOS.Application.Users;
 using GroceryPOS.Domain.Identity;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -49,6 +50,8 @@ public static class DependencyInjection
         services.AddScoped<IProductImportExportAppService, ProductImportExportService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ICustomerService, CustomerService>();
+        services.AddScoped<IUserManagementService, UserManagementService>();
+        services.AddScoped<IRoleService, RoleService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton, includeInternalTypes: false);
         return services;

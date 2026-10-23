@@ -74,3 +74,30 @@ internal sealed class InMemoryUserRepository : IUserRepository
 
     public void Remove(User entity) => _users.Remove(entity);
 }
+
+internal sealed class InMemoryRoleRepository : IRoleRepository
+{
+    private readonly List<Role> _roles = new();
+    private int _nextId = 1;
+
+    public Task<Role?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_roles.FirstOrDefault(r => r.Id == id));
+
+    public Task<IReadOnlyList<Role>> ListAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Role>>(_roles.ToList());
+
+    public Task<Role?> GetByNameAsync(string name, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_roles.FirstOrDefault(r => r.Name == name.Trim()));
+
+    public void Add(Role entity)
+    {
+        if (entity.IsTransient)
+        {
+            typeof(Entity).GetProperty(nameof(Entity.Id))!.SetValue(entity, _nextId++);
+        }
+
+        _roles.Add(entity);
+    }
+
+    public void Remove(Role entity) => _roles.Remove(entity);
+}

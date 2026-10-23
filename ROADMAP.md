@@ -23,8 +23,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] AuthService: login, lockout after failed attempts, change password, logout (application layer)
 - [x] Login form, change-password dialog (mandatory on first sign-in), session in app shell (`GroceryPOS.App`)
 - [x] Permission-aware menus/buttons (sidebar filtered by permission, screen buttons disabled)
-- [ ] User management screen (create, edit, reset password, unlock, activate/deactivate)
-- [ ] Role management screen (permission matrix)
+- [x] User management (`UserManagementService`: create with temporary password, edit name/role, reset password, unlock, activate/deactivate; privilege ceiling + last-administrator guard) and screen (Người dùng)
+- [x] Role management (`RoleService`: custom roles, system names fixed, Admin locked, delete only unused roles) and permission matrix screen (Phân quyền: grouped rows, tri-state group toggles, highlighted unsaved changes)
 - [ ] Move the WinForms screens to MVP (Presenter + IView) once the base classes exist
 - [x] Global exception handling + Serilog wiring in WinForms host (synchronous STA `Main`)
 

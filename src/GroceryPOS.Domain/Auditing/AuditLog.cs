@@ -39,6 +39,13 @@ public static class AuditActions
     public const string Logout = "auth.logout";
     public const string PasswordChanged = "auth.password_changed";
     public const string PasswordReset = "auth.password_reset";
+    public const string UserCreated = "user.created";
+    public const string UserUpdated = "user.updated";
+    public const string UserStatusChanged = "user.status_changed";
+    public const string UserUnlocked = "user.unlocked";
+    public const string RoleCreated = "role.created";
+    public const string RoleUpdated = "role.updated";
+    public const string RoleDeleted = "role.deleted";
     public const string SaleCompleted = "sale.completed";
     public const string SaleVoided = "sale.voided";
     public const string SaleReturned = "sale.returned";

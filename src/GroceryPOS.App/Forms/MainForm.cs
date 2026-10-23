@@ -42,7 +42,8 @@ public sealed class MainForm : Form
         new NavSection("Báo cáo & Hệ thống", new[]
         {
             new NavItem("reports", "Báo cáo", Glyphs.Chart, new[] { Permissions.ReportsView }),
-            new NavItem("users", "Người dùng", Glyphs.Admin, new[] { Permissions.UsersView }),
+            new NavItem("users", "Người dùng", Glyphs.People, new[] { Permissions.UsersView, Permissions.UsersManage }),
+            new NavItem("roles", "Phân quyền", Glyphs.Admin, new[] { Permissions.RolesManage }),
             new NavItem("settings", "Cấu hình", Glyphs.Settings, new[] { Permissions.SettingsManage }),
         }),
     });
@@ -129,6 +130,8 @@ public sealed class MainForm : Form
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
             "suppliers" => new SupplierListScreen(_scopeFactory, _currentUser),
+            "users" => new UserListScreen(_scopeFactory, _currentUser),
+            "roles" => new RolePermissionScreen(_scopeFactory),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;

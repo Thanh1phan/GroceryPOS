@@ -49,6 +49,16 @@ public sealed class User : AuditableEntity
         MustChangePassword = mustChange;
     }
 
+    /// <summary>
+    /// Sets a temporary password chosen by an administrator: the user must change it at the next sign-in,
+    /// and any lockout is lifted so they can sign in with it right away.
+    /// </summary>
+    public void ResetPassword(string passwordHash)
+    {
+        SetPasswordHash(passwordHash, mustChange: true);
+        Unlock();
+    }
+
     /// <summary>Records a failed login; returns true when this attempt caused a lockout.</summary>
     public bool RegisterFailedLogin(DateTimeOffset now, LockoutPolicy policy)
     {

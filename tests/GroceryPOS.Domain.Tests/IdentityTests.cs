@@ -54,6 +54,22 @@ public class UserTests
 
         Assert.False(user.IsLockedOut(TestData.Now));
     }
+
+    [Fact]
+    public void ResetPassword_forces_change_and_lifts_lockout()
+    {
+        var user = NewUser();
+        for (var i = 0; i < 3; i++)
+        {
+            user.RegisterFailedLogin(TestData.Now, Policy);
+        }
+
+        user.ResetPassword("new-hash");
+
+        Assert.Equal("new-hash", user.PasswordHash);
+        Assert.True(user.MustChangePassword);
+        Assert.False(user.IsLockedOut(TestData.Now));
+    }
 }
 
 public class RoleTests
@@ -86,5 +102,14 @@ public class RoleTests
 
         Assert.Contains(Permissions.SalesCreate, cashier);
         Assert.DoesNotContain(Permissions.UsersManage, cashier);
+    }
+
+    [Fact]
+    public void Every_permission_is_in_exactly_one_group()
+    {
+        var grouped = Permissions.Groups.SelectMany(g => g.Keys).ToList();
+
+        Assert.Equal(grouped.Count, grouped.Distinct().Count());
+        Assert.Equal(Permissions.All.OrderBy(k => k), grouped.OrderBy(k => k));
     }
 }
