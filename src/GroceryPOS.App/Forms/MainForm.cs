@@ -1,5 +1,6 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Authentication;
+using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.App.Forms.Screens;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Display;
@@ -126,6 +127,7 @@ public sealed class MainForm : Form
         Control screen = key switch
         {
             "dashboard" => BuildDashboard(),
+            "pos" => new PosScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
