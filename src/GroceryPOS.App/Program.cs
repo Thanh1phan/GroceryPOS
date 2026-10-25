@@ -1,6 +1,7 @@
 using GroceryPOS.App.Forms;
 using GroceryPOS.Application;
 using GroceryPOS.Application.Abstractions;
+using GroceryPOS.Application.Common;
 using GroceryPOS.Infrastructure;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
@@ -29,11 +30,12 @@ internal static class Program
         var database = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
         var logging = configuration.GetSection(LoggingOptions.SectionName).Get<LoggingOptions>() ?? new LoggingOptions();
         var seed = configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
+        var store = configuration.GetSection(StoreProfile.SectionName).Get<StoreProfile>() ?? StoreProfile.Default;
 
         var services = new ServiceCollection();
         services.AddGroceryLogging(logging);
         services.AddInfrastructure(database, seed);
-        services.AddApplication();
+        services.AddApplication(store: store);
         using var provider = services.BuildServiceProvider();
 
         using (var scope = provider.CreateScope())
@@ -45,6 +47,7 @@ internal static class Program
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var currentUser = provider.GetRequiredService<ICurrentUser>();
         var logger = provider.GetRequiredService<Serilog.ILogger>();
+        Log.Logger = logger; // static Log for UI code that has no injected logger (e.g. printing)
 
         void ReportUnhandled(Exception exception)
         {

@@ -8,6 +8,7 @@ using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Sales;
+using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Domain.Identity;
@@ -24,11 +25,12 @@ public static class DependencyInjection
     /// Use cases are scoped so they share the scope's unit of work with the repositories.
     /// </summary>
     public static IServiceCollection AddApplication(
-        this IServiceCollection services, SalesOptions? sales = null, LockoutPolicy? lockout = null)
+        this IServiceCollection services, SalesOptions? sales = null, LockoutPolicy? lockout = null, StoreProfile? store = null)
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(sales ?? SalesOptions.Default);
         services.TryAddSingleton(lockout ?? LockoutPolicy.Default);
+        services.TryAddSingleton(store ?? StoreProfile.Default);
 
         services.TryAddSingleton<IUserSessionStore, UserSessionStore>();
         services.TryAddSingleton<ICurrentUser>(sp => sp.GetRequiredService<IUserSessionStore>());
@@ -37,6 +39,7 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceNumberGenerator, InvoiceNumberGenerator>();
         services.AddScoped<ICheckoutService, CheckoutService>();
         services.AddScoped<IPosLookupService, PosLookupService>();
+        services.AddScoped<IReceiptService, ReceiptService>();
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IShiftService, ShiftService>();
         services.AddScoped<IInventoryService, InventoryService>();

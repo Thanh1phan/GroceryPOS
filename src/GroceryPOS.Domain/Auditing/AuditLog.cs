@@ -49,6 +49,7 @@ public static class AuditActions
     public const string SaleCompleted = "sale.completed";
     public const string SaleVoided = "sale.voided";
     public const string SaleReturned = "sale.returned";
+    public const string ReceiptReprinted = "sale.receipt_reprinted";
     public const string PriceChanged = "product.price_changed";
     public const string CategoryCreated = "category.created";
     public const string CategoryUpdated = "category.updated";

@@ -1,6 +1,8 @@
 using GroceryPOS.Application.Abstractions;
+using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Sales;
+using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Domain.Common;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Sales;
@@ -18,7 +20,7 @@ namespace GroceryPOS.App.Forms.Pos;
 /// Counter screen (Bán hàng). Left: scan box + cart. Right: member, totals, tender and pay.
 /// All state lives in the UI-free <see cref="PosCart"/>; this control renders it and maps keys:
 /// F2 quét mã · F3 tìm sản phẩm · F4 số lượng · F5 khách hàng · F6 giảm giá dòng · F7 giảm giá hóa đơn ·
-/// F8 khách đưa · F9 thanh toán · +/− số lượng · Delete xóa dòng · Esc hủy đơn.
+/// F8 khách đưa · F9 thanh toán · Ctrl+P in lại hóa đơn · +/− số lượng · Delete xóa dòng · Esc hủy đơn.
 /// </summary>
 internal sealed class PosScreen : UserControl
 {
@@ -27,6 +29,7 @@ internal sealed class PosScreen : UserControl
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly bool _canDiscount;
     private readonly PosCart _cart;
+    private readonly StoreProfile _store;
 
     private readonly ModernTextBox _scan;
     private readonly ToneLabel _status;
@@ -62,6 +65,7 @@ internal sealed class PosScreen : UserControl
     private bool _rendering;
     private bool _busy;
     private decimal _quickCashTotal = -1;
+    private string? _lastInvoiceCode;
 
     public PosScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
     {
@@ -73,6 +77,7 @@ internal sealed class PosScreen : UserControl
         {
             var options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
             _cart = new PosCart(options.Loyalty);
+            _store = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
         }
 
         // ---- Left: scan box, status, cart ---------------------------------------------------------
@@ -127,7 +132,8 @@ internal sealed class PosScreen : UserControl
         _lineDiscount = ToolbarButton("Giảm giá dòng (F6)", Glyphs.Money, (_, _) => EditLineDiscount());
         _removeLine = ToolbarButton("Xóa dòng (Del)", Glyphs.Delete, (_, _) => RemoveLine());
         _removeLine.Variant = ButtonVariant.Danger;
-        _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine]);
+        var reprint = ToolbarButton("In lại HĐ (Ctrl+P)", Glyphs.Print, async (_, _) => await ReprintAsync());
+        _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine, reprint]);
 
         var left = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 16, 8, 16) };
         left.Controls.Add(_grid);
@@ -331,6 +337,9 @@ internal sealed class PosScreen : UserControl
                 return true;
             case Keys.F9:
                 _ = CheckoutAsync();
+                return true;
+            case Keys.Control | Keys.P:
+                _ = ReprintAsync();
                 return true;
             case Keys.Escape:
                 CancelSale();
@@ -631,7 +640,12 @@ internal sealed class PosScreen : UserControl
             _cart.Clear();
             _phone.Clear();
             _phone.ClearValidation();
+            _lastInvoiceCode = receipt.Code;
             ShowStatus(DescribeReceipt(receipt), LabelTone.Success);
+            if (_store.PreviewReceiptAfterCheckout)
+            {
+                await ShowReceiptAsync(service => service.GetForSaleAsync(receipt.SaleId), keepStatus: true);
+            }
         }
         finally
         {
@@ -641,6 +655,76 @@ internal sealed class PosScreen : UserControl
                 _pay.Enabled = true;
                 FocusScan();
             }
+        }
+    }
+
+    /// <summary>Reprint (Ctrl+P): asks for the invoice number, pre-filled with the last sale of this counter.</summary>
+    private async Task ReprintAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        string code;
+        using (var dialog = new ReprintDialog(_lastInvoiceCode))
+        {
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                FocusScan();
+                return;
+            }
+
+            code = dialog.Code;
+        }
+
+        _busy = true;
+        try
+        {
+            await ShowReceiptAsync(service => service.ReprintAsync(code), keepStatus: false);
+        }
+        finally
+        {
+            _busy = false;
+            if (!IsDisposed)
+            {
+                FocusScan();
+            }
+        }
+    }
+
+    private async Task ShowReceiptAsync(Func<IReceiptService, Task<Result<ReceiptData>>> load, bool keepStatus)
+    {
+        Result<ReceiptData> result;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            result = await load(scope.ServiceProvider.GetRequiredService<IReceiptService>());
+        }
+
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (result.IsFailure)
+        {
+            if (keepStatus)
+            {
+                MessageBox.Show(this, result.Error.Message, "In hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            else
+            {
+                ShowStatus(result.Error.Message, LabelTone.Danger);
+            }
+
+            return;
+        }
+
+        using var preview = new ReceiptPreviewForm(result.Value, _store.ReceiptPaperWidthMm);
+        preview.ShowDialog(this);
+        if (!keepStatus && preview.Printed)
+        {
+            ShowStatus($"Đã in lại hóa đơn {result.Value.Code}.", LabelTone.Muted);
         }
     }
 
