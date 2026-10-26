@@ -9,21 +9,33 @@ using Serilog;
 namespace GroceryPOS.App.Forms.Pos;
 
 /// <summary>
-/// Print preview of a receipt (Xem trước hóa đơn). Enter / Ctrl+P prints to the default printer,
+/// Print preview of a receipt (Xem trước hóa đơn) or another roll printout such as a shift report. Enter / Ctrl+P prints to the default printer,
 /// "Chọn máy in" opens the printer dialog, the paper switch re-lays the receipt for 80 or 58 mm rolls, Esc closes.
 /// </summary>
 internal sealed class ReceiptPreviewForm : Form
 {
-    private readonly ReceiptData _receipt;
+    private readonly Func<int, IReadOnlyList<ReceiptLine>> _layout;
+    private readonly string _documentName;
     private readonly PrintPreviewControl _preview;
     private readonly ComboBox _paper;
     private readonly Label _status;
     private ReceiptPrintDocument? _document;
 
     public ReceiptPreviewForm(ReceiptData receipt, int paperWidthMm)
+        : this(
+            columns => ReceiptFormatter.Format(receipt, columns),
+            receipt.IsReprint ? $"In lại hóa đơn {receipt.Code}" : $"Hóa đơn {receipt.Code}",
+            $"Hóa đơn {receipt.Code}",
+            paperWidthMm)
     {
-        _receipt = receipt;
-        Text = receipt.IsReprint ? $"In lại hóa đơn {receipt.Code}" : $"Hóa đơn {receipt.Code}";
+    }
+
+    /// <summary>Preview of any fixed-width printout (e.g. a shift report); <paramref name="layout"/> lays it out for a column count.</summary>
+    public ReceiptPreviewForm(Func<int, IReadOnlyList<ReceiptLine>> layout, string title, string documentName, int paperWidthMm)
+    {
+        _layout = layout;
+        _documentName = documentName;
+        Text = title;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         ShowInTaskbar = false;
@@ -133,9 +145,9 @@ internal sealed class ReceiptPreviewForm : Form
 
     private void Rebuild()
     {
-        var lines = ReceiptFormatter.Format(_receipt, ReceiptFormatter.ColumnsFor(PaperWidthMm));
+        var lines = _layout(ReceiptFormatter.ColumnsFor(PaperWidthMm));
         var old = _document;
-        _document = new ReceiptPrintDocument(lines, PaperWidthMm, $"Hóa đơn {_receipt.Code}");
+        _document = new ReceiptPrintDocument(lines, PaperWidthMm, _documentName);
         _preview.Document = _document;
         _preview.InvalidatePreview();
         old?.Dispose();
@@ -168,9 +180,9 @@ internal sealed class ReceiptPreviewForm : Form
         }
         catch (Exception ex) when (ex is InvalidPrinterException or System.ComponentModel.Win32Exception)
         {
-            Log.Warning(ex, "Không in được hóa đơn {Code}", _receipt.Code);
+            Log.Warning(ex, "Không in được {Document}", _documentName);
             _status.Text = "Không in được: " + ex.Message;
-            MessageBox.Show(this, $"Không in được hóa đơn.\n{ex.Message}\n\nKiểm tra máy in hoặc chọn máy in khác.", "In hóa đơn",
+            MessageBox.Show(this, $"Không in được.\n{ex.Message}\n\nKiểm tra máy in hoặc chọn máy in khác.", _documentName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

@@ -37,5 +37,10 @@ public sealed record SalesOptions
     /// </summary>
     public decimal ShiftVarianceNoteThreshold { get; init; } = 5_000;
 
+    /// <summary>
+    /// Cashiers must have an open shift (ca bán hàng) to check out, so every sale lands in a cash drawer count.
+    /// </summary>
+    public bool RequireOpenShift { get; init; } = true;
+
     public LoyaltyPolicy Loyalty { get; init; } = LoyaltyPolicy.Default;
 }

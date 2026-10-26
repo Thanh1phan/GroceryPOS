@@ -38,7 +38,11 @@ public sealed class CheckoutService : ICheckoutService
     private readonly IAuditService _audit;
     private readonly TimeProvider _clock;
     private readonly SalesOptions _options;
+    private readonly IShiftRepository? _shifts;
 
+    /// <param name="shifts">
+    /// When given and <see cref="SalesOptions.RequireOpenShift"/> is on, the cashier needs an open shift to check out.
+    /// </param>
     public CheckoutService(
         ISaleRepository sales,
         IProductRepository products,
@@ -49,7 +53,8 @@ public sealed class CheckoutService : ICheckoutService
         ICurrentUser currentUser,
         IAuditService audit,
         TimeProvider clock,
-        SalesOptions? options = null)
+        SalesOptions? options = null,
+        IShiftRepository? shifts = null)
     {
         _sales = sales;
         _products = products;
@@ -61,6 +66,7 @@ public sealed class CheckoutService : ICheckoutService
         _audit = audit;
         _clock = clock;
         _options = options ?? SalesOptions.Default;
+        _shifts = shifts;
     }
 
     public async Task<Result<CheckoutReceipt>> CheckoutAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
@@ -90,6 +96,12 @@ public sealed class CheckoutService : ICheckoutService
         if (request.Payments.Count == 0)
         {
             return SaleErrors.NoPayment;
+        }
+
+        if (_options.RequireOpenShift && _shifts is not null
+            && await _shifts.GetOpenByUserAsync(session.UserId, cancellationToken) is null)
+        {
+            return SaleErrors.NoOpenShift;
         }
 
         var productIds = request.Lines.Select(l => l.ProductId).Distinct().ToList();

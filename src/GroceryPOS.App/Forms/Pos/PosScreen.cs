@@ -3,6 +3,8 @@ using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Sales.Receipts;
+using GroceryPOS.Application.Shifts;
+using GroceryPOS.App.Forms.Shifts;
 using GroceryPOS.Domain.Common;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Sales;
@@ -21,6 +23,7 @@ namespace GroceryPOS.App.Forms.Pos;
 /// All state lives in the UI-free <see cref="PosCart"/>; this control renders it and maps keys:
 /// F2 quét mã · F3 tìm sản phẩm · F4 số lượng · F5 khách hàng · F6 giảm giá dòng · F7 giảm giá hóa đơn ·
 /// F8 khách đưa · F9 thanh toán · Ctrl+P in lại hóa đơn · +/− số lượng · Delete xóa dòng · Esc hủy đơn.
+/// When <see cref="SalesOptions.RequireOpenShift"/> is on, the cashier is asked to open a shift on entry and cannot pay without one.
 /// </summary>
 internal sealed class PosScreen : UserControl
 {
@@ -30,6 +33,10 @@ internal sealed class PosScreen : UserControl
     private readonly bool _canDiscount;
     private readonly PosCart _cart;
     private readonly StoreProfile _store;
+    private readonly SalesOptions _options;
+    private readonly ICurrentUser _currentUser;
+    private readonly ToneLabel _shiftInfo;
+    private readonly ModernButton _openShift;
 
     private readonly ModernTextBox _scan;
     private readonly ToneLabel _status;
@@ -66,17 +73,20 @@ internal sealed class PosScreen : UserControl
     private bool _busy;
     private decimal _quickCashTotal = -1;
     private string? _lastInvoiceCode;
+    private ShiftSummaryDto? _shift;
+    private string? _shiftProblem;
 
     public PosScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
     {
         _scopeFactory = scopeFactory;
+        _currentUser = currentUser;
         _canDiscount = currentUser.HasPermission(Permissions.SalesDiscount);
         Dock = DockStyle.Fill;
 
         using (var scope = scopeFactory.CreateScope())
         {
-            var options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
-            _cart = new PosCart(options.Loyalty);
+            _options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
+            _cart = new PosCart(_options.Loyalty);
             _store = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
         }
 
@@ -135,10 +145,18 @@ internal sealed class PosScreen : UserControl
         var reprint = ToolbarButton("In lại HĐ (Ctrl+P)", Glyphs.Print, async (_, _) => await ReprintAsync());
         _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine, reprint]);
 
+        // ---- Shift bar: current shift, or "Mở ca" when none is open ------------------------------
+        _shiftInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 10, 12, 0), Text = "Đang kiểm tra ca làm việc…" };
+        _openShift = new ModernButton { Text = "Mở ca", Variant = ButtonVariant.Primary, IconGlyph = Glyphs.Add, Size = new Size(110, 34), Visible = false };
+        _openShift.Click += async (_, _) => await PromptOpenShiftAsync();
+        var shiftBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = false, Padding = new Padding(0, 0, 0, 6) };
+        shiftBar.Controls.AddRange([_shiftInfo, _openShift]);
+
         var left = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 16, 8, 16) };
         left.Controls.Add(_grid);
         left.Controls.Add(_status);
         left.Controls.Add(_scan);
+        left.Controls.Add(shiftBar);
 
         // ---- Right: customer, totals, payment ----------------------------------------------------
         var side = new TableLayoutPanel
@@ -291,11 +309,104 @@ internal sealed class PosScreen : UserControl
         Controls.Add(sideHost);
 
         _cart.Changed += (_, _) => Render();
-        Load += (_, _) =>
+        Load += async (_, _) =>
         {
             Render();
             FocusScan();
+            await LoadShiftAsync(promptToOpen: true);
         };
+    }
+
+    // ---- Shift -------------------------------------------------------------------------------------
+
+    private bool ShiftMissing => _options.RequireOpenShift && _shift is null;
+
+    /// <summary>Loads the cashier's open shift; with <paramref name="promptToOpen"/> offers the open-shift dialog when there is none.</summary>
+    private async Task LoadShiftAsync(bool promptToOpen)
+    {
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            _shiftProblem = result.IsFailure ? result.Error.Message : null;
+            _shift = result.IsSuccess ? result.Value.Current : null;
+            RenderShift();
+            Render();
+            if (result.IsFailure || _shift is not null || !_options.RequireOpenShift || !promptToOpen)
+            {
+                return;
+            }
+
+            OpenShiftDialog(result.Value.SuggestedOpeningFloat);
+        }
+    }
+
+    private async Task PromptOpenShiftAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (result.IsFailure)
+        {
+            MessageBox.Show(this, result.Error.Message, "Mở ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (result.Value.Current is { } open)
+        {
+            _shift = open;
+            RenderShift();
+            Render();
+            return;
+        }
+
+        OpenShiftDialog(result.Value.SuggestedOpeningFloat);
+    }
+
+    private void OpenShiftDialog(decimal suggestedFloat)
+    {
+        using var dialog = new OpenShiftDialog(_scopeFactory, suggestedFloat, _currentUser.Session?.FullName);
+        if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Opened is { } opened)
+        {
+            _shift = opened;
+            ShowStatus($"Đã mở ca {opened.Code} với tiền đầu ca {Vnd.Format(opened.OpeningFloat)}.", LabelTone.Success);
+        }
+
+        RenderShift();
+        Render();
+        FocusScan();
+    }
+
+    private void RenderShift()
+    {
+        if (_shift is { } shift)
+        {
+            var openedAt = shift.OpenedAt.ToOffset(_options.StoreUtcOffset).ToString("HH:mm dd/MM", System.Globalization.CultureInfo.InvariantCulture);
+            _shiftInfo.Text = $"Ca {shift.Code} · mở lúc {openedAt} · tiền đầu ca {Vnd.Format(shift.OpeningFloat)}";
+            _shiftInfo.Tone = LabelTone.Muted;
+            _openShift.Visible = false;
+            return;
+        }
+
+        if (_shiftProblem is not null)
+        {
+            _shiftInfo.Text = _options.RequireOpenShift ? $"Không thể bán hàng: {_shiftProblem}" : _shiftProblem;
+            _shiftInfo.Tone = _options.RequireOpenShift ? LabelTone.Danger : LabelTone.Muted;
+            _openShift.Visible = false;
+            return;
+        }
+
+        _shiftInfo.Text = _options.RequireOpenShift ? "Chưa mở ca – cần mở ca trước khi thanh toán." : "Chưa mở ca.";
+        _shiftInfo.Tone = _options.RequireOpenShift ? LabelTone.Warning : LabelTone.Muted;
+        _openShift.Visible = true;
     }
 
     // ---- Keyboard ----------------------------------------------------------------------------------
@@ -609,6 +720,18 @@ internal sealed class PosScreen : UserControl
             return;
         }
 
+        if (ShiftMissing)
+        {
+            ShowStatus("Chưa mở ca – vui lòng mở ca trước khi thanh toán.", LabelTone.Danger);
+            System.Media.SystemSounds.Beep.Play();
+            if (_shiftProblem is null)
+            {
+                await PromptOpenShiftAsync();
+            }
+
+            return;
+        }
+
         _tendered.Commit();
         var request = _cart.BuildRequest();
         if (request.IsFailure)
@@ -632,6 +755,13 @@ internal sealed class PosScreen : UserControl
             if (result.IsFailure)
             {
                 ShowStatus(result.Error.Message, LabelTone.Danger);
+                if (result.Error == SaleErrors.NoOpenShift)
+                {
+                    // The shift was closed elsewhere (e.g. "Kết ca hộ" by a manager): back to "Mở ca".
+                    _shift = null;
+                    RenderShift();
+                }
+
                 MessageBox.Show(this, result.Error.Message, "Thanh toán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -652,7 +782,7 @@ internal sealed class PosScreen : UserControl
             _busy = false;
             if (!IsDisposed)
             {
-                _pay.Enabled = true;
+                Render();
                 FocusScan();
             }
         }
@@ -837,8 +967,10 @@ internal sealed class PosScreen : UserControl
             RenderQuickCash();
 
             _change.Text = Vnd.Format(_cart.Change);
-            _blocker.Text = _cart.IsEmpty ? string.Empty : _cart.CheckoutBlocker ?? string.Empty;
-            _pay.Enabled = !_busy && _cart.CanCheckout;
+            _blocker.Text = ShiftMissing
+                ? "Chưa mở ca bán hàng."
+                : _cart.IsEmpty ? string.Empty : _cart.CheckoutBlocker ?? string.Empty;
+            _pay.Enabled = !_busy && _cart.CanCheckout && !ShiftMissing;
         }
         finally
         {

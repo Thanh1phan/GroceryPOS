@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-26
+- New **Ca làm việc** screen in `GroceryPOS.App`: current shift card (status, opening time and float, KPI cards for net revenue, invoices, cash in drawer, transfer + card), Mở ca / Nộp tiền vào két / Chi tiền / Báo cáo giữa ca / Kết ca, and the shift history (date range, "Chỉ ca đang mở"; supervisors see every cashier and can **Kết ca hộ**).
+- Dialogs: open shift with the float pre-filled from the cash the previous shift left; pay-in/pay-out with one-click reasons and a drawer-balance check; close-shift count sheet (notes per denomination with Enter to move down, or one typed total), live variance badge, "Để lại tất cả", hand-over amount, note required from 5.000 ₫ and a confirmation. Its state is the UI-free `Application.Shifts.CashCountSheet`.
+- Shift reports print on the receipt printer: `ShiftReportFormatter` lays out BÁO CÁO GIỮA CA / BÁO CÁO KẾT CA (sales, voids, returns, tenders, drawer reconciliation, pay-ins/outs, notes, signature lines) for 80/58 mm; the receipt preview now accepts any fixed-width printout.
+- Checkout requires an open shift (`SalesOptions.RequireOpenShift`, default on; `SaleErrors.NoOpenShift`). The POS shows the current shift above the scan box, offers "Mở ca" on entry and keeps Thanh toán disabled until a shift is open; if a manager closes the shift meanwhile the counter falls back to "Mở ca".
+- 10 new tests (Domain 141, Application 287, Infrastructure 37, UI.Controls 272 – all passing).
+
 ## 2026-10-25
 - Added receipts (`Application.Sales.Receipts`): `ReceiptService` builds a `ReceiptData` snapshot of a completed sale – store info, invoice number and time (store time zone), cashier, items with line discounts, invoice/points discounts, tenders with transaction codes, change, VAT per rate and the member block (phone masked as `0901***567`, points earned/used, balance only right after checkout). Needs `sales.create` or `reports.view`.
 - Reprints (`ReprintAsync`, by invoice number) are marked **BẢN IN LẠI** with the print time and audited as `sale.receipt_reprinted`; voided invoices print **HÓA ĐƠN ĐÃ HỦY**.

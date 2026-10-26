@@ -55,7 +55,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Customer returns (phiếu trả `TH{yyMMdd}-{0001}`): partial/multiple returns per invoice, discount-aware refunds, restock or write-off, proportional loyalty reversal, return window (7 days; older needs `sales.void`), audit (application layer; UI pending)
 - [ ] Returns screen: scan invoice, pick quantities, restock/write-off toggle, refund slip
 - [x] Shifts (ca `CA{yyMMdd}-{0001}`): open with float, pay-in/pay-out with reason, live X-report, close with count by denomination, variance (note required ≥ 5.000 ₫), cash left for next shift, supervisor view/force-close (`shifts.supervise`), audit (application layer; UI pending)
-- [ ] Shift screens: open-shift dialog (pre-filled float), pay-in/out dialog, close-shift count sheet + printable shift report; POS requires an open shift
+- [x] Shift screens: open-shift dialog (pre-filled float), pay-in/out dialog, close-shift count sheet + printable shift report; POS requires an open shift (checkout refuses without one; `CashCountSheet`, `ShiftReportFormatter`, Ca làm việc screen with history and Kết ca hộ)
 
 ## M6 – Inventory & purchasing
 - [x] Goods receipt (phiếu nhập `PN{yyMMdd}-{0001}`): draft → complete/cancel, line + receipt discounts, moving weighted-average cost, optional new sell price, supplier debt, ledger + audit (application layer; UI pending)

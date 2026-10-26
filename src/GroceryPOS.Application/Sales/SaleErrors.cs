@@ -13,6 +13,8 @@ public static class SaleErrors
 
     public static readonly Error CustomerNotFound = Error.NotFound("Không tìm thấy khách hàng.");
 
+    public static readonly Error NoOpenShift = Error.Conflict("Bạn chưa mở ca bán hàng. Vui lòng mở ca trước khi thanh toán.");
+
     public static readonly Error SaleNotFound = Error.NotFound("Không tìm thấy hóa đơn.");
 
     public static Error ProductNotFound(int productId) => Error.NotFound($"Không tìm thấy sản phẩm (mã #{productId}).");

@@ -2,6 +2,7 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Authentication;
 using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.App.Forms.Screens;
+using GroceryPOS.App.Forms.Shifts;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
@@ -134,6 +135,7 @@ public sealed class MainForm : Form
             "suppliers" => new SupplierListScreen(_scopeFactory, _currentUser),
             "users" => new UserListScreen(_scopeFactory, _currentUser),
             "roles" => new RolePermissionScreen(_scopeFactory),
+            "shifts" => new ShiftScreen(_scopeFactory, _currentUser),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;

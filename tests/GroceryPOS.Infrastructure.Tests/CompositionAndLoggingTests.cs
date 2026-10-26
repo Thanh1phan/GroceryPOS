@@ -81,6 +81,39 @@ public sealed class CompositionAndLoggingTests : IDisposable
     }
 
     [Fact]
+    public async Task Container_checkout_requires_an_open_shift()
+    {
+        using var app = BuildApp();
+        using (var scope = app.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>().InitializeAsync();
+            Assert.True((await scope.ServiceProvider.GetRequiredService<IAuthService>().LoginAsync("admin", "admin123")).IsSuccess);
+        }
+
+        var request = new CheckoutRequest(
+            new[] { new CheckoutLine(999_999, 1) },
+            new[] { new PaymentInput(Domain.Sales.PaymentMethod.Cash, 10_000) });
+
+        using (var scope = app.CreateScope())
+        {
+            var result = await scope.ServiceProvider.GetRequiredService<ICheckoutService>().CheckoutAsync(request);
+            Assert.Equal(SaleErrors.NoOpenShift, result.Error);
+        }
+
+        using (var scope = app.CreateScope())
+        {
+            Assert.True((await scope.ServiceProvider.GetRequiredService<IShiftService>().OpenAsync(new OpenShiftRequest(200_000))).IsSuccess);
+        }
+
+        using (var scope = app.CreateScope())
+        {
+            // Past the shift check: now it fails on the unknown product instead.
+            var result = await scope.ServiceProvider.GetRequiredService<ICheckoutService>().CheckoutAsync(request);
+            Assert.Equal(SaleErrors.ProductNotFound(999_999), result.Error);
+        }
+    }
+
+    [Fact]
     public async Task Login_through_the_container_signs_in_and_logs_with_the_user_name()
     {
         using (var app = BuildApp())
