@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-27
+- New **Trả hàng** screen in `GroceryPOS.App`: scan or type the invoice number, see each line (bought, already returned, refund per unit) with a badge for the return window, pick quantities (Enter/F4, +/−, Space = whole line, F7 = whole invoice), mark damaged goods with F6 (refunded but written off), refund in cash or by transfer, reason with one-click chips, earlier returns of the invoice, and Hoàn tiền (F9) after a confirmation.
+- Its state is the UI-free `Application.Sales.ReturnSheet`: quantities rounded and clamped to what is left, refund preview computed exactly like `SaleLine.RefundFor`, loyalty points to take back/restore as `Sale.RegisterReturn`, blocker text and `BuildRequest()`; a parity test checks the preview against what `ReturnService` refunds across partial and final returns.
+- Refund slip **PHIẾU TRẢ HÀNG** (`ReturnSlipFormatter`, 80/58 mm) printed through the receipt preview: original invoice, cashier, customer, items with refunds, written-off goods marked, refund method, points, reason and signature lines. `ReturnReceipt` now carries the returned lines, reason and customer name.
+- Cash refunds need an open shift (`ReturnErrors.NoOpenShiftForCashRefund`, same `SalesOptions.RequireOpenShift` switch as checkout) so every đồng leaving the drawer shows up in the shift count; transfer refunds are still allowed without one.
+- 6 new tests (Domain 141, Application 293, Infrastructure 37, UI.Controls 272 – all passing).
+
 ## 2026-10-26
 - New **Ca làm việc** screen in `GroceryPOS.App`: current shift card (status, opening time and float, KPI cards for net revenue, invoices, cash in drawer, transfer + card), Mở ca / Nộp tiền vào két / Chi tiền / Báo cáo giữa ca / Kết ca, and the shift history (date range, "Chỉ ca đang mở"; supervisors see every cashier and can **Kết ca hộ**).
 - Dialogs: open shift with the float pre-filled from the cash the previous shift left; pay-in/pay-out with one-click reasons and a drawer-balance check; close-shift count sheet (notes per denomination with Enter to move down, or one typed total), live variance badge, "Để lại tất cả", hand-over amount, note required from 5.000 ₫ and a confirmation. Its state is the UI-free `Application.Shifts.CashCountSheet`.

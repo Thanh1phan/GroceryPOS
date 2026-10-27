@@ -39,6 +39,7 @@ public sealed class ReturnService : IReturnService
     private readonly IAuditService _audit;
     private readonly TimeProvider _clock;
     private readonly SalesOptions _options;
+    private readonly IShiftRepository? _shifts;
 
     public ReturnService(
         ISaleRepository sales,
@@ -50,7 +51,8 @@ public sealed class ReturnService : IReturnService
         ICurrentUser currentUser,
         IAuditService audit,
         TimeProvider clock,
-        SalesOptions? options = null)
+        SalesOptions? options = null,
+        IShiftRepository? shifts = null)
     {
         _sales = sales;
         _returns = returns;
@@ -62,6 +64,7 @@ public sealed class ReturnService : IReturnService
         _audit = audit;
         _clock = clock;
         _options = options ?? SalesOptions.Default;
+        _shifts = shifts;
     }
 
     public async Task<Result<ReturnableSaleDto>> GetReturnableAsync(string saleCode, CancellationToken cancellationToken = default)
@@ -121,7 +124,9 @@ public sealed class ReturnService : IReturnService
             sale.PointsRedeemed,
             withinWindow,
             CanReturn: !sale.IsFullyReturned && (withinWindow || _currentUser.HasPermission(Permissions.SalesVoid)),
-            lines);
+            lines,
+            sale.PointsReversed,
+            sale.RedeemedPointsRestored);
     }
 
     public async Task<Result<ReturnReceipt>> CreateAsync(CreateReturnRequest request, CancellationToken cancellationToken = default)
@@ -153,6 +158,13 @@ public sealed class ReturnService : IReturnService
         if (!IsWithinWindow(sale) && !_currentUser.HasPermission(Permissions.SalesVoid))
         {
             return ReturnErrors.WindowExpired(_options.ReturnWindowDays);
+        }
+
+        // Cash comes out of the drawer, so it must land in an open shift's count (like checkout).
+        if (request.RefundMethod == PaymentMethod.Cash && _options.RequireOpenShift && _shifts is not null
+            && await _shifts.GetOpenByUserAsync(session.UserId, cancellationToken) is null)
+        {
+            return ReturnErrors.NoOpenShiftForCashRefund;
         }
 
         var returnItems = new List<ReturnItem>(items.Count);
@@ -204,11 +216,13 @@ public sealed class ReturnService : IReturnService
         }
 
         int? pointsBalance = null;
+        string? customerName = null;
         if (sale.CustomerId is { } customerId
             && await _customers.GetByIdAsync(customerId, cancellationToken) is { } customer)
         {
             customer.ReverseSale(saleReturn.RefundTotal, saleReturn.PointsReversed, saleReturn.PointsRestored);
             pointsBalance = customer.LoyaltyPoints;
+            customerName = customer.Name;
         }
 
         _returns.Add(saleReturn);
@@ -226,7 +240,12 @@ public sealed class ReturnService : IReturnService
             saleReturn.PointsRestored,
             pointsBalance,
             sale.IsFullyReturned,
-            saleReturn.WrittenOffCost);
+            saleReturn.WrittenOffCost,
+            saleReturn.Lines
+                .Select(l => new ReturnedLineDto(l.ProductCode, l.ProductName, l.Unit, l.Quantity, l.RefundAmount, l.Restock))
+                .ToList(),
+            saleReturn.Reason,
+            customerName);
     }
 
     public async Task<Result<IReadOnlyList<SaleReturnSummaryDto>>> ListBySaleAsync(int saleId, CancellationToken cancellationToken = default)

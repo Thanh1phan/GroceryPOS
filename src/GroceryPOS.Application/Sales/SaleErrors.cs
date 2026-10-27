@@ -35,6 +35,9 @@ public static class ReturnErrors
 
     public static readonly Error EmptyReturn = new("return.empty", "Vui lòng chọn sản phẩm cần trả.");
 
+    public static readonly Error NoOpenShiftForCashRefund =
+        Error.Conflict("Bạn chưa mở ca nên không thể hoàn tiền mặt từ két. Vui lòng mở ca hoặc hoàn bằng chuyển khoản.");
+
     public static readonly Error ReturnNotFound = Error.NotFound("Không tìm thấy phiếu trả hàng.");
 
     public static Error WindowExpired(int days) =>

@@ -129,6 +129,7 @@ public sealed class MainForm : Form
         {
             "dashboard" => BuildDashboard(),
             "pos" => new PosScreen(_scopeFactory, _currentUser),
+            "returns" => new ReturnScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
