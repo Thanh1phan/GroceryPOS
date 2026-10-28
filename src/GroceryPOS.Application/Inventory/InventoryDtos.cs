@@ -84,3 +84,32 @@ public sealed record LowStockItem(
     /// <summary>Quantity needed to get back to the minimum level.</summary>
     public decimal Shortage => Math.Max(0, MinStockLevel - StockQuantity);
 }
+
+/// <summary>One product on the stock list (danh sách tồn kho) with its stock value at cost.</summary>
+public sealed record StockItem(
+    int ProductId,
+    string ProductCode,
+    string? Barcode,
+    string ProductName,
+    int CategoryId,
+    string CategoryName,
+    string Unit,
+    decimal StockQuantity,
+    decimal MinStockLevel,
+    decimal CostPrice,
+    decimal SellPrice,
+    bool IsActive)
+{
+    public bool IsOutOfStock => StockQuantity <= 0;
+
+    public bool IsLowStock => StockQuantity <= MinStockLevel;
+
+    /// <summary>Stock value at cost (giá trị tồn); negative stock counts as zero.</summary>
+    public decimal StockValue => Math.Round(Math.Max(0, StockQuantity) * CostPrice, 0, MidpointRounding.AwayFromZero);
+
+    public string StatusName => !IsActive ? "Ngừng kinh doanh"
+        : StockQuantity < 0 ? "Tồn âm"
+        : IsOutOfStock ? "Hết hàng"
+        : IsLowStock ? "Sắp hết"
+        : "Còn hàng";
+}

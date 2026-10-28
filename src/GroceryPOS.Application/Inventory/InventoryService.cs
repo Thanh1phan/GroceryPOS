@@ -26,6 +26,9 @@ public interface IInventoryService
     /// <summary>Stock card of one product for a period. Requires <c>inventory.view</c>.</summary>
     Task<Result<StockLedger>> GetLedgerAsync(int productId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default);
 
+    /// <summary>Every product with stock, minimum level and value at cost, sorted by name. Requires <c>inventory.view</c>.</summary>
+    Task<Result<IReadOnlyList<StockItem>>> GetStockListAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Active products at or below their minimum level, out-of-stock first. Requires <c>inventory.view</c>.</summary>
     Task<Result<IReadOnlyList<LowStockItem>>> GetLowStockAsync(CancellationToken cancellationToken = default);
 }
@@ -232,6 +235,23 @@ public sealed class InventoryService : IInventoryService
         var opening = closing - totalIn + totalOut;
 
         return new StockLedger(product.Id, product.Code, product.Name, product.Unit, opening, totalIn, totalOut, closing, entries);
+    }
+
+    public async Task<Result<IReadOnlyList<StockItem>>> GetStockListAsync(CancellationToken cancellationToken = default)
+    {
+        if (Authorize(Permissions.InventoryView) is { } denied)
+        {
+            return denied;
+        }
+
+        var products = await _products.ListAsync(cancellationToken);
+        IReadOnlyList<StockItem> items = products
+            .Select(p => new StockItem(
+                p.Id, p.Code, p.Barcode, p.Name, p.CategoryId, p.Category?.Name ?? string.Empty, p.Unit,
+                p.StockQuantity, p.MinStockLevel, p.CostPrice, p.SellPrice, p.IsActive))
+            .OrderBy(i => i.ProductName, StringComparer.Create(Vnd.Culture, ignoreCase: true))
+            .ToList();
+        return Result.Success(items);
     }
 
     public async Task<Result<IReadOnlyList<LowStockItem>>> GetLowStockAsync(CancellationToken cancellationToken = default)

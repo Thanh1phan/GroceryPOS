@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-28
+- New **Tồn kho** screen in `GroceryPOS.App`: KPI cards (stock value at cost and sell price, active products, low stock, out of stock / negative stock), a stock list tab (code, barcode, category, stock, minimum, cost, value, coloured status, "Hiện SP ngừng kinh doanh") and a **Sắp hết hàng** tab with a count badge, shortage to minimum, reorder suggestion (refill to 2× minimum) and its expected cost. Backed by the new `IInventoryService.GetStockListAsync` (`StockItem`, `inventory.view`).
+- **Điều chỉnh tồn kho** dialog (F6): reasons show their direction ("Hư hỏng (giảm)", "Phát hiện thừa (tăng)"), type the quantity or the actual stock on the shelf, live preview of stock and value after, below-minimum warning, note required for "Lý do khác". State in the UI-free `Application.Inventory.StockAdjustmentDraft`, whose blockers mirror `StockMovement.Apply`.
+- **Thẻ kho** window (F7 / double-click): period filter (default this month), opening / in / out / closing cards and every movement with document code, running balance, unit cost, reason and note.
+- **Kiểm kê kho** (F8): scan items on the shelf (each scan +1, `12*mã` +12) or add a whole category / all products, type counts line by line (Enter moves to the next uncounted product), variance and its value per line and in total, "SP chưa đếm = sổ sách" / "Bỏ các SP chưa đếm", confirmation before F9 applies only the counted lines. State in the tested `StockCountSheet`; a parity test checks its totals against what `InventoryService.CountAsync` records.
+- 9 new tests (Domain 141, Application 302, Infrastructure 37, UI.Controls 272 – all passing).
+
 ## 2026-10-27
 - New **Trả hàng** screen in `GroceryPOS.App`: scan or type the invoice number, see each line (bought, already returned, refund per unit) with a badge for the return window, pick quantities (Enter/F4, +/−, Space = whole line, F7 = whole invoice), mark damaged goods with F6 (refunded but written off), refund in cash or by transfer, reason with one-click chips, earlier returns of the invoice, and Hoàn tiền (F9) after a confirmation.
 - Its state is the UI-free `Application.Sales.ReturnSheet`: quantities rounded and clamped to what is left, refund preview computed exactly like `SaleLine.RefundFor`, loyalty points to take back/restore as `Sale.RegisterReturn`, blocker text and `BuildRequest()`; a parity test checks the preview against what `ReturnService` refunds across partial and final returns.

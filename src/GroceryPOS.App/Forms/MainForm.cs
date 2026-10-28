@@ -1,5 +1,6 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Authentication;
+using GroceryPOS.App.Forms.Inventory;
 using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.App.Forms.Screens;
 using GroceryPOS.App.Forms.Shifts;
@@ -132,6 +133,7 @@ public sealed class MainForm : Form
             "returns" => new ReturnScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
+            "inventory" => new InventoryScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
             "suppliers" => new SupplierListScreen(_scopeFactory, _currentUser),
             "users" => new UserListScreen(_scopeFactory, _currentUser),

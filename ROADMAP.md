@@ -67,7 +67,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Stock adjustments with reason + audit, and stock counts (kiểm kê) with variance value (application layer; UI pending)
 - [x] Stock movement ledger (`StockMovement`, written by checkout/void/adjust/count) + stock card query with opening/closing balance
 - [x] Low-stock alerts query (out-of-stock first, shortage to minimum; UI pending)
-- [ ] Inventory screens: adjustment dialog, stock count sheet, stock card, low-stock list
+- [x] Inventory screens (Tồn kho): stock list with value, low-stock tab with reorder suggestion, adjustment dialog (`StockAdjustmentDraft`), stock card window, stock count sheet with scanning (`StockCountSheet`)
 
 ## M7 – Reports & dashboard
 - [x] Report queries (application layer): daily revenue with returns/voids/VAT/COGS/profit and tender split, best sellers (by quantity/revenue/profit, category filter, revenue share), profit by category, inventory value by category (cost/retail/potential profit, out/low/negative stock)
