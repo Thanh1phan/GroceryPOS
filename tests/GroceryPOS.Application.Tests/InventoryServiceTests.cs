@@ -218,5 +218,16 @@ public class InventoryServiceTests
 
         Assert.Equal("forbidden", (await sut.GetLowStockAsync()).Error.Code);
         Assert.Equal("forbidden", (await sut.GetLedgerAsync(_beer.Id)).Error.Code);
+        Assert.Equal("forbidden", (await sut.GetStockListAsync()).Error.Code);
+    }
+
+    [Fact]
+    public async Task Stock_list_is_open_to_purchasing_for_the_goods_receipt_editor()
+    {
+        SignIn(Permissions.PurchasesManage);
+        var sut = CreateSut();
+
+        Assert.True((await sut.GetStockListAsync()).IsSuccess);
+        Assert.Equal("forbidden", (await sut.GetLowStockAsync()).Error.Code);
     }
 }

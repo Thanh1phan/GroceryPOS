@@ -26,7 +26,10 @@ public interface IInventoryService
     /// <summary>Stock card of one product for a period. Requires <c>inventory.view</c>.</summary>
     Task<Result<StockLedger>> GetLedgerAsync(int productId, DateTimeOffset? from = null, DateTimeOffset? to = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Every product with stock, minimum level and value at cost, sorted by name. Requires <c>inventory.view</c>.</summary>
+    /// <summary>
+    /// Every product with stock, minimum level and value at cost, sorted by name. Requires <c>inventory.view</c>
+    /// or <c>purchases.manage</c> (the goods receipt editor scans against this list).
+    /// </summary>
     Task<Result<IReadOnlyList<StockItem>>> GetStockListAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Active products at or below their minimum level, out-of-stock first. Requires <c>inventory.view</c>.</summary>
@@ -239,7 +242,8 @@ public sealed class InventoryService : IInventoryService
 
     public async Task<Result<IReadOnlyList<StockItem>>> GetStockListAsync(CancellationToken cancellationToken = default)
     {
-        if (Authorize(Permissions.InventoryView) is { } denied)
+        if (Authorize(Permissions.InventoryView) is { } denied
+            && (_currentUser.Session is null || !_currentUser.HasPermission(Permissions.PurchasesManage)))
         {
             return denied;
         }
