@@ -42,6 +42,7 @@ public sealed class MainForm : Form
         {
             new NavItem("customers", "Khách hàng", Glyphs.People, new[] { Permissions.CustomersView }),
             new NavItem("suppliers", "Nhà cung cấp", Glyphs.People, new[] { Permissions.SuppliersManage, Permissions.PurchasesManage, Permissions.SupplierPaymentsManage }),
+            new NavItem("supplier-debt", "Công nợ NCC", Glyphs.Money, new[] { Permissions.SupplierPaymentsManage, Permissions.PurchasesManage }),
         }),
         new NavSection("Báo cáo & Hệ thống", new[]
         {
@@ -138,6 +139,7 @@ public sealed class MainForm : Form
             "purchases" => new PurchaseScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_scopeFactory, _currentUser),
             "suppliers" => new SupplierListScreen(_scopeFactory, _currentUser),
+            "supplier-debt" => new SupplierDebtScreen(_scopeFactory, _currentUser),
             "users" => new UserListScreen(_scopeFactory, _currentUser),
             "roles" => new RolePermissionScreen(_scopeFactory),
             "shifts" => new ShiftScreen(_scopeFactory, _currentUser),

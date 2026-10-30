@@ -62,7 +62,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Reorder suggestions from low-stock products (refill to 2× minimum)
 - [x] Supplier payments (phiếu chi `PC{yyMMdd}-{0001}`, cash/transfer, cancel with reason restores debt), payables list, supplier debt ledger with opening/running/closing balance (`suppliers.pay`; application layer, UI pending)
 - [x] Supplier returns (`TN{yyMMdd}-{0001}`): against a completed receipt (capped by remaining quantity and landed cost) or free; stock out at average cost, refund and/or debt offset, audit (application layer; UI pending)
-- [ ] Supplier debt & return screens: payables list, pay dialog, debt ledger, supplier return editor (scan receipt code)
+- [x] Supplier debt & return screens (Công nợ NCC): payables list, pay dialog, payment history with cancel, debt ledger, supplier return editor (by receipt code or free) – state in `SupplierReturnSheet`
 - [x] Goods receipt screens (Nhập hàng): receipt list with period/status/supplier filters and KPI cards, editor with barcode scan, catalog picker and reorder suggestions, live landed/average cost and margin preview (`GoodsReceiptDraft`), completion summary with below-cost warnings, cancel draft with reason
 - [x] Stock adjustments with reason + audit, and stock counts (kiểm kê) with variance value (application layer; UI pending)
 - [x] Stock movement ledger (`StockMovement`, written by checkout/void/adjust/count) + stock card query with opening/closing balance
