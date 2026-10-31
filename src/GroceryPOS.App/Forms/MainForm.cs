@@ -3,11 +3,10 @@ using GroceryPOS.Application.Authentication;
 using GroceryPOS.App.Forms.Inventory;
 using GroceryPOS.App.Forms.Purchasing;
 using GroceryPOS.App.Forms.Pos;
+using GroceryPOS.App.Forms.Dashboard;
 using GroceryPOS.App.Forms.Screens;
 using GroceryPOS.App.Forms.Shifts;
 using GroceryPOS.Domain.Identity;
-using GroceryPOS.UI.Controls.Display;
-using GroceryPOS.UI.Controls.Display.Core;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Navigation;
 using GroceryPOS.UI.Controls.Navigation.Core;
@@ -92,8 +91,13 @@ public sealed class MainForm : Form
         Load += (_, _) =>
         {
             ThemeManager.Track(this);
-            _sidebar.SelectItem("dashboard");
-            ShowScreen("dashboard", "Tổng quan");
+            // Selecting raises ItemSelected, which shows the screen. Users without the dashboard start on
+            // the first screen they may open.
+            var start = Menu.Filter(_currentUser.HasPermission).Items.FirstOrDefault();
+            if (!_sidebar.SelectItem("dashboard") && (start is null || !_sidebar.SelectItem(start.Key)))
+            {
+                ShowScreen(string.Empty, "Tổng quan");
+            }
         };
     }
 
@@ -130,7 +134,7 @@ public sealed class MainForm : Form
         _content.Controls.Clear();
         Control screen = key switch
         {
-            "dashboard" => BuildDashboard(),
+            "dashboard" => new DashboardScreen(_scopeFactory, _currentUser, Navigate),
             "pos" => new PosScreen(_scopeFactory, _currentUser),
             "returns" => new ReturnScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
@@ -150,32 +154,8 @@ public sealed class MainForm : Form
         ThemeManager.Apply(screen);
     }
 
-    private Control BuildDashboard()
-    {
-        var panel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(24),
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = true,
-            AutoScroll = true,
-        };
-
-        panel.Controls.Add(MakeStat("Doanh thu hôm nay", "0 ₫", Glyphs.Money, BadgeKind.Success));
-        panel.Controls.Add(MakeStat("Hóa đơn hôm nay", "0", Glyphs.Document, BadgeKind.Primary));
-        panel.Controls.Add(MakeStat("Sản phẩm sắp hết hàng", "0", Glyphs.Package, BadgeKind.Warning));
-        panel.Controls.Add(MakeStat("Ca đang mở", "0", Glyphs.Calculator, BadgeKind.Info));
-        return panel;
-    }
-
-    private static StatCard MakeStat(string caption, string value, string glyph, BadgeKind accent) => new()
-    {
-        Caption = caption,
-        Value = value,
-        Glyph = glyph,
-        Accent = accent,
-        Margin = new Padding(0, 0, 16, 16),
-    };
+    /// <summary>Opens a screen from a shortcut (dashboard quick actions), keeping the sidebar selection in sync.</summary>
+    private void Navigate(string key) => _sidebar.SelectItem(key); // raises ItemSelected → ShowScreen
 
     private static Control BuildPlaceholder(string title) => new Label
     {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-10-31
+- New **Tổng quan** dashboard in `GroceryPOS.App` (replaces the static placeholder): greeting and date, quick actions by permission (Bán hàng F2, Nhập hàng, Tồn kho), KPI cards – doanh thu hôm nay with the trend vs. hôm qua, hóa đơn and average basket, lợi nhuận gộp (or tiền hoàn trả for users without `reports.view`) and **Ca của bạn** (cash expected in the drawer, or "Chưa mở ca"). Refreshes every minute and on F5.
+- Cards **Doanh thu 7 ngày** (today highlighted, week total / average / best day), **Doanh thu theo giờ hôm nay** (store hours 6h–22h widened to any hour with sales, current hour highlighted, busiest hour), **Bán chạy hôm nay** (top 5 by revenue) and **Sắp hết hàng** (out-of-stock in red; Enter opens Tồn kho).
+- New `BarChart` control in `GroceryPOS.UI.Controls`: themed column chart with nice gridlines, compact VND axis labels (850k, 1,2tr, 2,5 tỷ), rounded bars, highlight + hover tooltip, labels thinned out when crowded, empty state. Its maths is the UI-free, tested `ChartScale`; the dashboard's labels and windows come from `Application.Reports.DashboardFigures`.
+- Fix: the shell built its start screen twice at sign-in (selecting the sidebar item already shows it); users without `dashboard.view` now start on the first screen they may open.
+- 37 new tests (Domain 141, Application 332, Infrastructure 37, UI.Controls 295 – all passing).
+
 ## 2026-10-30
 - New **Công nợ NCC** screen in `GroceryPOS.App` (sidebar → Đối tác; `suppliers.pay` or `purchases.manage`): KPI cards (total payable, paid and returned in the period, largest debt), tabs **Công nợ phải trả** (suppliers still owed, count badge), **Phiếu chi** (payments of the period, **Hủy phiếu chi** with a required reason) and **Trả hàng NCC** (returns of the period, Enter shows the slip). Keys: F6 Thanh toán, F7 Sổ công nợ, F8 Trả hàng NCC, F5 làm mới.
 - **Trả nợ NCC** dialog: amount pre-filled with the whole debt ("Trả hết" / "Trả một nửa"), cash or transfer with transaction reference, note, live remaining debt and a confirmation. **Sổ chi tiết công nợ** window: period filter, opening / increase / decrease / closing cards and every receipt, payment, cancellation and return with the running balance.
