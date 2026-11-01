@@ -72,6 +72,7 @@ public sealed class CompositionAndLoggingTests : IDisposable
         Assert.NotNull(sp.GetRequiredService<ISupplierPaymentService>());
         Assert.NotNull(sp.GetRequiredService<ISupplierReturnService>());
         Assert.NotNull(sp.GetRequiredService<IReportService>());
+        Assert.NotNull(sp.GetRequiredService<GroceryPOS.Application.Reports.Export.IReportExportService>());
         Assert.NotNull(sp.GetRequiredService<IValidator<CheckoutRequest>>());
         Assert.NotNull(sp.GetRequiredService<IValidator<CloseShiftRequest>>());
         Assert.NotNull(sp.GetRequiredService<IValidator<ChangePasswordInput>>());

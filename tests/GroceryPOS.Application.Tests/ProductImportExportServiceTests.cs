@@ -1,3 +1,4 @@
+using GroceryPOS.Domain.Auditing;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
@@ -40,13 +41,27 @@ public class ProductImportExportServiceTests
 
     private ProductService Products => new(_products, _categories, _priceHistory, _uow, _session, _audit, _clock);
 
-    private ProductImportExportService CreateSut() => new(Products, _products, _categories, _transcoder, _session, _audit);
+    private ProductImportExportService CreateSut() => new(Products, _products, _categories, _transcoder, _session, _audit, _uow);
 
     private void SignIn(params string[] permissions) =>
         _session.SignIn(new UserSession(1, "admin", "Quản trị viên", SystemRoles.Admin, permissions.ToHashSet(), _clock.Now));
 
     private ProductImportRow NewRow(int rowNumber, string code, decimal cost = 10_000, decimal sell = 12_000, bool isActive = true) =>
         new(rowNumber, code, null, "Sữa tươi Vinamilk 1L", _category.Name, "hộp", cost, sell, VatRate.Five, 10, isActive);
+
+    [Fact]
+    public async Task Export_and_import_audit_entries_are_saved()
+    {
+        var export = await CreateSut().ExportAsync();
+        Assert.True(export.IsSuccess);
+        Assert.Contains(AuditActions.ProductExported, _audit.Actions);
+        Assert.Equal(1, _uow.SaveCount);
+
+        var import = await CreateSut().ImportAsync(Stream.Null);
+        Assert.True(import.IsSuccess);
+        Assert.Contains(AuditActions.ProductImported, _audit.Actions);
+        Assert.Equal(2, _uow.SaveCount);
+    }
 
     [Fact]
     public async Task New_code_is_created_with_zero_stock()

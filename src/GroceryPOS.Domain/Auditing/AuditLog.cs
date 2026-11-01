@@ -75,4 +75,5 @@ public static class AuditActions
     public const string ShiftOpened = "shift.opened";
     public const string ShiftClosed = "shift.closed";
     public const string CashMoved = "shift.cash_movement";
+    public const string ReportExported = "report.exported";
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-01
+- New **Báo cáo** screen in `GroceryPOS.App` (`reports.view`): one period picker drives four tabs – **Doanh thu** (KPI cards for net revenue with the trend vs. the previous period of the same length, invoices and average basket, gross profit and margin, refunds/voids; daily chart – monthly for periods over 62 days – with best day; table per day), **Hàng bán chạy** (rank by số lượng/doanh thu/lợi nhuận, category filter, top 10–100, share of revenue), **Lợi nhuận theo danh mục** (chart + table) and **Giá trị tồn kho** (cost/retail value, potential profit, out/low/negative stock). Only the visible tab loads; F5 reloads.
+- Excel export: **Xuất Excel (Ctrl+E)** saves the current tab, **Xuất tất cả** one workbook with a sheet per report. `IReportExportService` builds format-neutral `ReportSheet`s (`ReportSheets`: Vietnamese headers, store/period/exported-by lines, totals row) and the ClosedXML `IReportWorkbookWriter` writes typed cells with VND/percent/date formats, a filter row, frozen header and A4 landscape print setup; exports are audited as `report.exported`.
+- New `ModernDateRangePicker` control (◀ preset ▾ from – to ▶, Alt+←/→): presets fill both dates, typed dates re-select the matching preset or "Tùy chọn", stepping moves whole weeks/months/years, never past today and capped at 366 days – rules in the UI-free, tested `DateRangeSelection`.
+- Fix: product Excel import/export audit entries were recorded but never saved; `ProductImportExportService` now saves them.
+- 28 new tests (Domain 141, Application 343, Infrastructure 40, UI.Controls 309 – all passing).
+
 ## 2026-10-31
 - New **Tổng quan** dashboard in `GroceryPOS.App` (replaces the static placeholder): greeting and date, quick actions by permission (Bán hàng F2, Nhập hàng, Tồn kho), KPI cards – doanh thu hôm nay with the trend vs. hôm qua, hóa đơn and average basket, lợi nhuận gộp (or tiền hoàn trả for users without `reports.view`) and **Ca của bạn** (cash expected in the drawer, or "Chưa mở ca"). Refreshes every minute and on F5.
 - Cards **Doanh thu 7 ngày** (today highlighted, week total / average / best day), **Doanh thu theo giờ hôm nay** (store hours 6h–22h widened to any hour with sales, current hour highlighted, busiest hour), **Bán chạy hôm nay** (top 5 by revenue) and **Sắp hết hàng** (out-of-stock in red; Enter opens Tồn kho).

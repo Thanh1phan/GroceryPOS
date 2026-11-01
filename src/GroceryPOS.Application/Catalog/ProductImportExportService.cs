@@ -28,6 +28,7 @@ public sealed class ProductImportExportService : IProductImportExportAppService
     private readonly IProductImportExportService _transcoder;
     private readonly ICurrentUser _currentUser;
     private readonly IAuditService _audit;
+    private readonly IUnitOfWork _unitOfWork;
 
     public ProductImportExportService(
         IProductService products,
@@ -35,7 +36,8 @@ public sealed class ProductImportExportService : IProductImportExportAppService
         ICategoryRepository categories,
         IProductImportExportService transcoder,
         ICurrentUser currentUser,
-        IAuditService audit)
+        IAuditService audit,
+        IUnitOfWork unitOfWork)
     {
         _products = products;
         _productRepository = productRepository;
@@ -43,6 +45,7 @@ public sealed class ProductImportExportService : IProductImportExportAppService
         _transcoder = transcoder;
         _currentUser = currentUser;
         _audit = audit;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<Result<byte[]>> ExportAsync(CancellationToken cancellationToken = default)
@@ -60,6 +63,7 @@ public sealed class ProductImportExportService : IProductImportExportAppService
 
         var bytes = await _transcoder.ExportAsync(products.Value, cancellationToken);
         _audit.Record(AuditActions.ProductExported, details: $"{products.Value.Count} sản phẩm");
+        await _unitOfWork.SaveChangesAsync(cancellationToken); // the audit entry is only written on save
         return bytes;
     }
 
@@ -105,6 +109,7 @@ public sealed class ProductImportExportService : IProductImportExportAppService
 
         var failed = results.Count(r => r.Outcome == ImportRowOutcome.Failed);
         _audit.Record(AuditActions.ProductImported, details: $"Tạo mới {created}, cập nhật {updated}, lỗi {failed}");
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return new ImportSummary(created, updated, failed, results);
     }
 

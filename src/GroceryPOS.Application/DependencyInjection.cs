@@ -7,6 +7,7 @@ using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
+using GroceryPOS.Application.Reports.Export;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Application.Shifts;
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ISupplierPaymentService, SupplierPaymentService>();
         services.AddScoped<ISupplierReturnService, SupplierReturnService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IReportExportService, ReportExportService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IPriceHistoryService, PriceHistoryService>();

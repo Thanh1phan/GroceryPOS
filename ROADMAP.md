@@ -32,7 +32,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] ThemeManager with color/font/spacing tokens, light/dark themes (WCAG-checked palettes, `Track(form)` live switching, font cache with icon-font fallback)
 - [x] Rounded buttons (primary/secondary/danger/ghost, icon glyph, focus ring), icon text box with placeholder & validation state (error/warning/valid, helper text, Enter event for scanners)
 - [x] Combo box (owner-drawn, accent-insensitive filter-as-you-type, `DataSource`/`ValueMember`), numeric/currency input (live vi-VN grouping, `25k` shortcut, ↑/↓ stepping, range clamp), date picker (dd/MM/yyyy + shortcuts, calendar drop-down, min/max), date-range presets for report filters; text box gained suffix and clickable trailing icon
-- [ ] Date-range picker control (preset list + from/to) for report and list screens
+- [x] Date-range picker control (`ModernDateRangePicker`: preset list + from/to + previous/next period, state in the tested `DateRangeSelection`)
 - [x] Modern grid wrapper with paging/search/sorting (`ModernDataGrid`: in-memory or provider-paged data, debounced accent-insensitive search, header sort cycle, pager with page links + page size, typed column helpers, toolbar slot, empty state)
 - [x] Card/panel (`ModernCard`, KPI `StatCard` with trend), sidebar navigation (`SidebarNav`: permission-filtered `NavMenu`, sections, badges, collapse to icons, keyboard), top bar (`TopBar`: title/breadcrumb, actions slot, notifications, theme toggle, user chip with avatar + menu), tab control (`ModernTabControl`: underline tabs, count badges, overflow arrows, cancelable `Selecting`, Ctrl+Tab), badge (`ModernBadge`, soft/solid, WCAG-checked)
 - [ ] Toast notifications, modal dialog, loading overlay
@@ -72,7 +72,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 ## M7 – Reports & dashboard
 - [x] Report queries (application layer): daily revenue with returns/voids/VAT/COGS/profit and tender split, best sellers (by quantity/revenue/profit, category filter, revenue share), profit by category, inventory value by category (cost/retail/potential profit, out/low/negative stock)
 - [x] Dashboard query: today vs. yesterday, 7-day trend, sales by hour, top 5 products, low-stock (profit only with `reports.view`)
-- [ ] Report screens: period picker (hôm nay/tuần/tháng/tùy chọn), revenue chart + table, best sellers, profit by category, inventory value; export to Excel/PDF
+- [x] Report screens (Báo cáo): period picker, revenue KPIs vs. previous period + chart + table, best sellers, profit by category, inventory value; Excel export per tab or all tabs (`IReportExportService`, audited)
+- [ ] Report PDF export / print preview
 - [x] Dashboard screen (KPI cards incl. own shift, 7-day chart, hourly chart, top products, low-stock list, quick actions, auto-refresh) + `BarChart` control
 - [ ] Audit log viewer
 
