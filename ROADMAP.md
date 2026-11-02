@@ -75,7 +75,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Report screens (Báo cáo): period picker, revenue KPIs vs. previous period + chart + table, best sellers, profit by category, inventory value; Excel export per tab or all tabs (`IReportExportService`, audited)
 - [ ] Report PDF export / print preview
 - [x] Dashboard screen (KPI cards incl. own shift, 7-day chart, hourly chart, top products, low-stock list, quick actions, auto-refresh) + `BarChart` control
-- [ ] Audit log viewer
+- [x] Audit log viewer (Nhật ký hệ thống): `IAuditLogService` + `IAuditLogRepository` (server-side filter/paging/LIKE search), `AuditCatalog` (Vietnamese names, groups, severities), KPI summary, detail card, Excel export (audited)
 
 ## M8 – Polish
 - [ ] Settings screen (store info, receipt footer, loyalty policy, theme)

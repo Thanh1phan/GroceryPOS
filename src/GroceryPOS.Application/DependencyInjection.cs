@@ -3,6 +3,7 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Authentication;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
+using GroceryPOS.Application.Auditing;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
@@ -49,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ISupplierReturnService, SupplierReturnService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IReportExportService, ReportExportService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IPriceHistoryService, PriceHistoryService>();

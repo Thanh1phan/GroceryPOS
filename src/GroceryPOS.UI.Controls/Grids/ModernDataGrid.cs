@@ -422,6 +422,14 @@ public class ModernDataGrid : UserControl, IThemeable
         ApplySearchNow();
     }
 
+    /// <summary>Puts <paramref name="text"/> in the search box and applies it at once (back to page 1).</summary>
+    public void SetSearch(string? text)
+    {
+        _search.Text = text?.Trim() ?? string.Empty;
+        _searchDelay.Stop();
+        ApplySearchNow();
+    }
+
     public void FocusSearch()
     {
         if (_showSearch)

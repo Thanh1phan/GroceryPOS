@@ -302,3 +302,84 @@ public sealed class RepositoryTests : IDisposable
         context.Sales.Add(sale);
     }
 }
+
+/// <summary>Audit log queries against real SQLite (DateTimeOffset range on the binary column, LIKE escaping, paging, grouping).</summary>
+public sealed class AuditLogRepositoryTests : IDisposable
+{
+    private static readonly TimeSpan Vietnam = TimeSpan.FromHours(7);
+    private readonly SqliteTestDatabase _db = new();
+
+    public void Dispose() => _db.Dispose();
+
+    private async Task SeedAsync()
+    {
+        await using var context = _db.CreateContext();
+        DateTimeOffset At(int day, int hour) => new(2026, 11, day, hour, 0, 0, Vietnam);
+        context.AuditLogs.AddRange(
+            new GroceryPOS.Domain.Auditing.AuditLog(At(1, 23), "auth.login", 1, "admin"),
+            new GroceryPOS.Domain.Auditing.AuditLog(At(2, 8), "sale.completed", 2, "thungan1", "Sale", "HD261102-0001", "Giảm 10% cho khách quen"),
+            new GroceryPOS.Domain.Auditing.AuditLog(At(2, 9), "sale.voided", 3, "QuanLy", "Sale", "HD261102-0001", "Lý do: khách đổi ý"),
+            new GroceryPOS.Domain.Auditing.AuditLog(At(2, 10), "auth.login_failed", null, "khach", details: "Tài khoản không tồn tại"),
+            new GroceryPOS.Domain.Auditing.AuditLog(At(2, 11), "product.price_changed", 3, "QuanLy", "Product", "SUA_01", "25.000 → 27.000"),
+            new GroceryPOS.Domain.Auditing.AuditLog(At(3, 0), "auth.login", 1, "admin"));
+        await context.SaveChangesAsync();
+    }
+
+    private static AuditLogFilter Nov2(IReadOnlyCollection<string>? actions = null, string? user = null, string? search = null,
+        bool oldestFirst = false, int skip = 0, int take = 50) =>
+        new(new DateTimeOffset(2026, 11, 2, 0, 0, 0, Vietnam), new DateTimeOffset(2026, 11, 3, 0, 0, 0, Vietnam),
+            actions, user, search, oldestFirst, skip, take);
+
+    [Fact]
+    public async Task Search_filters_by_range_actions_user_and_pages_newest_first()
+    {
+        await SeedAsync();
+        await using var context = _db.CreateContext();
+        var repository = new AuditLogRepository(context);
+
+        var all = await repository.SearchAsync(Nov2());
+        Assert.Equal(4, all.TotalCount);
+        Assert.Equal(["product.price_changed", "auth.login_failed", "sale.voided", "sale.completed"], all.Items.Select(a => a.Action));
+
+        var page2 = await repository.SearchAsync(Nov2(oldestFirst: true, skip: 2, take: 2));
+        Assert.Equal(4, page2.TotalCount);
+        Assert.Equal(["auth.login_failed", "product.price_changed"], page2.Items.Select(a => a.Action));
+
+        var sales = await repository.SearchAsync(Nov2(actions: ["sale.completed", "sale.voided"]));
+        Assert.Equal(2, sales.TotalCount);
+
+        Assert.Equal(0, (await repository.SearchAsync(Nov2(actions: []))).TotalCount);
+        Assert.Equal(2, (await repository.SearchAsync(Nov2(user: "QuanLy"))).TotalCount);
+        Assert.Empty(context.ChangeTracker.Entries());
+    }
+
+    [Fact]
+    public async Task Search_text_is_case_insensitive_and_treats_wildcards_literally()
+    {
+        await SeedAsync();
+        await using var context = _db.CreateContext();
+        var repository = new AuditLogRepository(context);
+
+        Assert.Equal(2, (await repository.SearchAsync(Nov2(search: "hd261102"))).TotalCount);   // entity id
+        Assert.Equal(2, (await repository.SearchAsync(Nov2(search: "quanly"))).TotalCount);     // username
+        Assert.Equal(1, (await repository.SearchAsync(Nov2(search: "10%"))).TotalCount);        // details, literal %
+        Assert.Equal(1, (await repository.SearchAsync(Nov2(search: "SUA_"))).TotalCount);       // literal _
+        Assert.Equal(0, (await repository.SearchAsync(Nov2(search: "SUA%01"))).TotalCount);
+    }
+
+    [Fact]
+    public async Task Counts_by_action_and_lists_usernames()
+    {
+        await SeedAsync();
+        await using var context = _db.CreateContext();
+        var repository = new AuditLogRepository(context);
+
+        var counts = await repository.CountByActionAsync(
+            new DateTimeOffset(2026, 11, 1, 0, 0, 0, Vietnam), new DateTimeOffset(2026, 11, 3, 0, 0, 0, Vietnam));
+        Assert.Equal(1, counts["auth.login"]);
+        Assert.Equal(1, counts["sale.voided"]);
+        Assert.Equal(5, counts.Values.Sum());
+
+        Assert.Equal(["admin", "khach", "QuanLy", "thungan1"], await repository.ListUsernamesAsync());
+    }
+}
