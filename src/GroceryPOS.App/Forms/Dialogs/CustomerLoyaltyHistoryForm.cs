@@ -2,6 +2,7 @@ using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
@@ -98,7 +99,7 @@ internal sealed class CustomerLoyaltyHistoryForm : Form
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

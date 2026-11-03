@@ -1,3 +1,4 @@
+using GroceryPOS.UI.Controls.Feedback;
 using System.Drawing.Printing;
 using GroceryPOS.App.Printing;
 using GroceryPOS.Application.Sales.Receipts;
@@ -182,7 +183,7 @@ internal sealed class ReceiptPreviewForm : Form
         {
             Log.Warning(ex, "Không in được {Document}", _documentName);
             _status.Text = "Không in được: " + ex.Message;
-            MessageBox.Show(this, $"Không in được.\n{ex.Message}\n\nKiểm tra máy in hoặc chọn máy in khác.", _documentName,
+            ModernDialog.Show(this, $"Không in được.\n{ex.Message}\n\nKiểm tra máy in hoặc chọn máy in khác.", _documentName,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

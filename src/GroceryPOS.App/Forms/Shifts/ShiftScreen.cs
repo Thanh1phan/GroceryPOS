@@ -8,6 +8,7 @@ using GroceryPOS.Domain.Shifts;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -314,7 +315,7 @@ internal sealed class ShiftScreen : UserControl
         var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetSummaryAsync(row.ShiftId);
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Kết ca hộ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Kết ca hộ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -330,7 +331,7 @@ internal sealed class ShiftScreen : UserControl
         }
 
         await ReloadAsync();
-        if (MessageBox.Show(this, $"Đã kết ca {closed.Code}. In báo cáo kết ca?", "Kết ca", MessageBoxButtons.YesNo, MessageBoxIcon.Information)
+        if (ModernDialog.Show(this, $"Đã kết ca {closed.Code}. In báo cáo kết ca?", "Kết ca", MessageBoxButtons.YesNo, MessageBoxIcon.Information)
             == DialogResult.Yes)
         {
             ShiftReportViewer.Show(this, _scopeFactory, closed);
@@ -348,7 +349,7 @@ internal sealed class ShiftScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Báo cáo ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Báo cáo ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

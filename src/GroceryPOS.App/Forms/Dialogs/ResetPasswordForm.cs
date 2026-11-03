@@ -4,6 +4,7 @@ using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Application.Validation;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
@@ -76,7 +77,7 @@ internal sealed class ResetPasswordForm : ModernDialogForm
         var result = await scope.ServiceProvider.GetRequiredService<IUserManagementService>().ResetPasswordAsync(_user.Id, _password.Text);
         if (result.IsSuccess)
         {
-            MessageBox.Show(this, $"Mật khẩu tạm của \"{_user.Username}\": {_password.Text}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ModernDialog.Show(this, $"Mật khẩu tạm của \"{_user.Username}\": {_password.Text}", Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         return result;

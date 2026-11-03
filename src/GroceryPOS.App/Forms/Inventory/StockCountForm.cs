@@ -1,6 +1,7 @@
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -191,7 +192,7 @@ internal sealed class StockCountForm : Form
     }
 
     private bool Confirm(string message) =>
-        MessageBox.Show(this, message, "Kiểm kê kho", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+        ModernDialog.Show(this, message, "Kiểm kê kho", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
 
     private void Report(string message, bool error = false)
     {
@@ -397,7 +398,7 @@ internal sealed class StockCountForm : Form
 
             var count = result.Value;
             _completed = true;
-            MessageBox.Show(
+            ModernDialog.Show(
                 this,
                 $"Đã lưu phiếu kiểm kê {count.Code}.\n\n"
                 + $"{count.Lines.Count} sản phẩm, lệch {count.MismatchCount}.\n"

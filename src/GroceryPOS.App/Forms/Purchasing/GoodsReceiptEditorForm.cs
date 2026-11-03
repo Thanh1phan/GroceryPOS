@@ -2,6 +2,7 @@ using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -241,7 +242,7 @@ internal sealed class GoodsReceiptEditorForm : Form
         {
             if (!_busy && DialogResult != DialogResult.OK && _draft.IsDirty && _draft.Lines.Count > 0)
             {
-                var answer = MessageBox.Show(
+                var answer = ModernDialog.Show(
                     this,
                     "Phiếu nhập có thay đổi chưa lưu. Lưu phiếu tạm trước khi đóng?",
                     "Phiếu nhập hàng",
@@ -725,7 +726,7 @@ internal sealed class GoodsReceiptEditorForm : Form
             + $"{_draft.Lines.Count} sản phẩm · tổng {Vnd.Format(_draft.Total)} · đã trả {Vnd.Format(_draft.PaidAmount)} · ghi nợ {Vnd.Format(_draft.DebtAmount)}.\n"
             + "Tồn kho và giá vốn sẽ được cập nhật; phiếu đã hoàn thành không sửa hay hủy được (chỉ trả hàng NCC)."
             + (below.Count > 0 ? $"\n\n⚠ {below.Count} sản phẩm sẽ có giá bán ≤ giá vốn mới." : string.Empty);
-        if (MessageBox.Show(this, message, "Hoàn thành nhập kho", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (ModernDialog.Show(this, message, "Hoàn thành nhập kho", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;
         }

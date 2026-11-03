@@ -1,9 +1,11 @@
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -111,6 +113,7 @@ internal sealed class ProductListScreen : UserControl
         using var dialog = new ProductEditForm(_scopeFactory, _currentUser, detail);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, detail is null ? "Đã thêm sản phẩm mới." : $"Đã lưu sản phẩm {detail.Code} – {detail.Name}.");
             await ReloadAsync();
         }
     }
@@ -144,15 +147,9 @@ internal sealed class ProductListScreen : UserControl
 
     private async Task ExportAsync()
     {
-        using var sfd = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx", FileName = "SanPham.xlsx" };
-        if (sfd.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
         using var scope = _scopeFactory.CreateScope();
         var importExport = scope.ServiceProvider.GetRequiredService<IProductImportExportAppService>();
-        var result = await importExport.ExportAsync();
+        var result = await LoadingOverlay.RunAsync(this, () => importExport.ExportAsync(), "Đang xuất danh sách sản phẩm…");
         if (IsDisposed)
         {
             return;
@@ -160,16 +157,16 @@ internal sealed class ProductListScreen : UserControl
 
         if (!result.IsSuccess)
         {
-            MessageBox.Show(this, result.Error.Message, "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Warning(this, result.Error.Message, "Xuất Excel");
             return;
         }
 
-        await File.WriteAllBytesAsync(sfd.FileName, result.Value);
+        await ExcelFiles.SaveAsync(this, "Xuất Excel", "Lưu danh sách sản phẩm", $"SanPham_{DateTime.Now:yyyyMMdd}.xlsx", result.Value);
     }
 
     private async Task ImportAsync()
     {
-        using var ofd = new OpenFileDialog { Filter = "Excel (*.xlsx)|*.xlsx" };
+        using var ofd = new OpenFileDialog { Filter = ExcelFiles.Filter, Title = "Chọn file Excel sản phẩm" };
         if (ofd.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -179,9 +176,18 @@ internal sealed class ProductListScreen : UserControl
         var importExport = scope.ServiceProvider.GetRequiredService<IProductImportExportAppService>();
 
         Result<ImportSummary> result;
-        await using (var stream = File.OpenRead(ofd.FileName))
+        try
         {
-            result = await importExport.ImportAsync(stream);
+            result = await LoadingOverlay.RunAsync(this, async () =>
+            {
+                await using var stream = File.OpenRead(ofd.FileName);
+                return await importExport.ImportAsync(stream);
+            }, "Đang nhập sản phẩm từ Excel…");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ModernDialog.Warning(this, "Không đọc được file. Nếu file đang mở trong Excel, hãy đóng file rồi thử lại.", "Nhập Excel", ex.Message);
+            return;
         }
 
         if (IsDisposed)
@@ -191,7 +197,7 @@ internal sealed class ProductListScreen : UserControl
 
         if (!result.IsSuccess)
         {
-            MessageBox.Show(this, result.Error.Message, "Nhập Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Warning(this, result.Error.Message, "Nhập Excel");
             return;
         }
 

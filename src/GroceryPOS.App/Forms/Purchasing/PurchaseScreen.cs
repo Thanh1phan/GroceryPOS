@@ -9,6 +9,7 @@ using GroceryPOS.Domain.Purchasing;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -257,7 +258,7 @@ internal sealed class PurchaseScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -312,13 +313,13 @@ internal sealed class PurchaseScreen : UserControl
 
         if (catalog.IsFailure || suppliers.IsFailure)
         {
-            MessageBox.Show(this, (catalog.IsFailure ? catalog.Error : suppliers.Error).Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, (catalog.IsFailure ? catalog.Error : suppliers.Error).Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return null;
         }
 
         if (!suppliers.Value.Any(s => s.IsActive))
         {
-            MessageBox.Show(this, "Chưa có nhà cung cấp nào đang giao dịch. Hãy thêm nhà cung cấp trước khi nhập hàng.", "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ModernDialog.Show(this, "Chưa có nhà cung cấp nào đang giao dịch. Hãy thêm nhà cung cấp trước khi nhập hàng.", "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return null;
         }
 
@@ -353,7 +354,7 @@ internal sealed class PurchaseScreen : UserControl
 
                 if (suggestions.IsSuccess && draft.AddSuggestions(suggestions.Value) == 0)
                 {
-                    MessageBox.Show(this, "Không có sản phẩm nào dưới định mức tồn kho. Mở phiếu trống.", "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ModernDialog.Show(this, "Không có sản phẩm nào dưới định mức tồn kho. Mở phiếu trống.", "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
         }
@@ -372,7 +373,7 @@ internal sealed class PurchaseScreen : UserControl
 
         if (receipt.IsFailure)
         {
-            MessageBox.Show(this, receipt.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, receipt.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -427,7 +428,7 @@ internal sealed class PurchaseScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Nhập hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

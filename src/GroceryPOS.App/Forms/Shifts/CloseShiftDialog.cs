@@ -1,3 +1,4 @@
+using GroceryPOS.UI.Controls.Feedback;
 using System.Globalization;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.App.Forms.Pos;
@@ -281,7 +282,7 @@ internal sealed class CloseShiftDialog : ModernDialogForm
             return;
         }
 
-        var confirm = MessageBox.Show(
+        var confirm = ModernDialog.Show(
             this,
             $"Kết ca với tiền mặt thực đếm {Vnd.Format(_sheet.Counted)} ({_sheet.VarianceLabel.ToLower(Vnd.Culture)}" +
             (_sheet.Variance == 0 ? ")" : $" {Vnd.Format(Math.Abs(_sheet.Variance))})") +

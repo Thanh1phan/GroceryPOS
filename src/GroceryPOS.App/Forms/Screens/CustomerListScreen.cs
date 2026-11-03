@@ -3,6 +3,7 @@ using GroceryPOS.Application.Partners;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
@@ -94,6 +95,7 @@ internal sealed class CustomerListScreen : UserControl
         using var dialog = new CustomerEditForm(_scopeFactory, customer);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, customer is null ? "Đã thêm khách hàng mới." : $"Đã lưu khách hàng {customer.Name}.");
             _ = ReloadAsync();
         }
     }
@@ -121,7 +123,7 @@ internal sealed class CustomerListScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Khách hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Khách hàng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

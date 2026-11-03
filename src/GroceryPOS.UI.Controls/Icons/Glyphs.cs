@@ -53,4 +53,9 @@ public static class Glyphs
     public const string Sun = "\uE706";
     public const string Moon = "\uE708";
     public const string More = "\uE712";
+
+    // Feedback (toasts, message dialogs).
+    public const string Help = "\uE897";
+    public const string Copy = "\uE8C8";
+    public const string Close = "\uE8BB";
 }

@@ -6,6 +6,7 @@ using GroceryPOS.Infrastructure;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Seeding;
+using GroceryPOS.UI.Controls.Feedback;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -49,9 +50,24 @@ internal static class Program
         var logger = provider.GetRequiredService<Serilog.ILogger>();
         Log.Logger = logger; // static Log for UI code that has no injected logger (e.g. printing)
 
-        void ReportUnhandled(Exception exception)
+        void ReportUnhandled(Exception exception, bool onUiThread)
         {
             logger.Error(exception, "Lỗi không xử lý được");
+            const string message = "Đã xảy ra lỗi ngoài dự kiến. Chi tiết đã được ghi vào log; nếu lỗi lặp lại, hãy gửi nội dung bên dưới (Ctrl+C để sao chép) cho bộ phận hỗ trợ.";
+            if (onUiThread)
+            {
+                try
+                {
+                    ModernDialog.Error(System.Windows.Forms.Form.ActiveForm, $"{message}\n\n{exception.Message}", "GroceryPOS – Lỗi", exception.ToString());
+                    return;
+                }
+                catch (Exception dialogFailure)
+                {
+                    // The themed dialog itself failed (e.g. a broken UI state) – fall back to the system box.
+                    logger.Error(dialogFailure, "Không hiển thị được hộp thoại lỗi");
+                }
+            }
+
             MessageBox.Show(
                 $"Đã xảy ra lỗi ngoài dự kiến:\n{exception.Message}\n\nChi tiết đã được ghi vào log.",
                 "GroceryPOS",
@@ -59,12 +75,12 @@ internal static class Program
                 MessageBoxIcon.Error);
         }
 
-        System.Windows.Forms.Application.ThreadException += (_, e) => ReportUnhandled(e.Exception);
+        System.Windows.Forms.Application.ThreadException += (_, e) => ReportUnhandled(e.Exception, onUiThread: true);
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             if (e.ExceptionObject is Exception exception)
             {
-                ReportUnhandled(exception);
+                ReportUnhandled(exception, onUiThread: false);
             }
         };
 

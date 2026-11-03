@@ -4,6 +4,7 @@ using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Domain.Sales;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -138,7 +139,7 @@ internal sealed class SupplierPaymentDialog : ModernDialogForm
 
         var method = _transfer.Checked ? PaymentMethod.BankTransfer : PaymentMethod.Cash;
         var confirm = $"Lập phiếu chi {Vnd.Format(amount)} ({(method == PaymentMethod.Cash ? "tiền mặt" : "chuyển khoản")}) trả nợ {_supplier.Name}?";
-        if (MessageBox.Show(this, confirm, "Trả nợ nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (ModernDialog.Show(this, confirm, "Trả nợ nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;
         }

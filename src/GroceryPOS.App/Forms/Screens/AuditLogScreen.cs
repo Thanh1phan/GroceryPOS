@@ -1,10 +1,12 @@
 using GroceryPOS.App.Forms.Pos;
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Auditing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Grids.Core;
 using GroceryPOS.UI.Controls.Icons;
@@ -469,44 +471,30 @@ internal sealed class AuditLogScreen : UserControl
     {
         using var scope = _scopeFactory.CreateScope();
         var service = scope.ServiceProvider.GetRequiredService<IAuditLogService>();
-        UseWaitCursor = true;
-        var result = await service.ExportAsync(BuildQuery());
+        var result = await LoadingOverlay.RunAsync(this, () => service.ExportAsync(BuildQuery()), "Đang xuất nhật ký…");
         if (IsDisposed)
         {
             return;
         }
 
-        UseWaitCursor = false;
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Warning(this, result.Error.Message, Caption);
             return;
         }
 
-        using var dialog = new SaveFileDialog
-        {
-            Title = "Lưu nhật ký hệ thống",
-            Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = result.Value.FileName,
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        };
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        var path = await ExcelFiles.SaveAsync(this, Caption, "Lưu nhật ký hệ thống", result.Value.FileName, result.Value.Content);
+        if (IsDisposed)
         {
             return;
         }
 
-        try
+        if (path is not null)
         {
-            await File.WriteAllBytesAsync(dialog.FileName, result.Value.Content);
-        }
-        catch (IOException ex)
-        {
-            MessageBox.Show(this, $"Không lưu được file (có thể file đang mở trong Excel).\n{ex.Message}", Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
+            SetStatus($"Đã xuất {Path.GetFileName(path)}", LabelTone.Success);
         }
 
-        SetStatus($"Đã xuất {Path.GetFileName(dialog.FileName)}", LabelTone.Success);
-        _grid.Reload(); // the export itself is now in the log
+        _grid.Reload(); // the export itself is now in the log (even when saving was cancelled)
         _ = LoadSummaryAsync();
     }
 

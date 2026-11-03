@@ -10,6 +10,7 @@ using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Sales;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -356,7 +357,7 @@ internal sealed class PosScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Mở ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Mở ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -762,7 +763,7 @@ internal sealed class PosScreen : UserControl
                     RenderShift();
                 }
 
-                MessageBox.Show(this, result.Error.Message, "Thanh toán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ModernDialog.Show(this, result.Error.Message, "Thanh toán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -840,7 +841,7 @@ internal sealed class PosScreen : UserControl
         {
             if (keepStatus)
             {
-                MessageBox.Show(this, result.Error.Message, "In hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ModernDialog.Show(this, result.Error.Message, "In hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             else
             {
@@ -887,7 +888,7 @@ internal sealed class PosScreen : UserControl
             return;
         }
 
-        if (MessageBox.Show(this, "Hủy đơn hàng đang bán?", "Hủy đơn", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+        if (ModernDialog.Confirm(this, $"Hủy đơn hàng đang bán ({_cart.Lines.Count} sản phẩm)? Giỏ hàng sẽ bị xóa.", "Hủy đơn", "Hủy đơn", "Tiếp tục bán", danger: true))
         {
             _cart.Clear();
             _phone.Clear();

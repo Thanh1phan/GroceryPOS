@@ -4,6 +4,7 @@ using GroceryPOS.Application.Users;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -117,8 +118,8 @@ internal sealed class UserListScreen : UserControl
         }
 
         if (user.IsActive
-            && MessageBox.Show(this, $"Ngừng hoạt động tài khoản \"{user.Username}\" ({user.FullName})?\nNgười này sẽ không đăng nhập được nữa.",
-                Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            && !ModernDialog.Confirm(this, $"Ngừng hoạt động tài khoản \"{user.Username}\" ({user.FullName})?\nNgười này sẽ không đăng nhập được nữa.",
+                Caption, "Ngừng hoạt động", "Hủy", danger: true))
         {
             return;
         }
@@ -142,7 +143,7 @@ internal sealed class UserListScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -164,7 +165,7 @@ internal sealed class UserListScreen : UserControl
         }
         else
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         UpdateToolbarState();

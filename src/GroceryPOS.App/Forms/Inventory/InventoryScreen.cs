@@ -5,6 +5,7 @@ using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Navigation;
@@ -194,7 +195,7 @@ internal sealed class InventoryScreen : UserControl
 
         if (stock.IsFailure)
         {
-            MessageBox.Show(this, stock.Error.Message, "Tồn kho", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, stock.Error.Message, "Tồn kho", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

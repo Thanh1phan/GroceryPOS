@@ -5,6 +5,7 @@ using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Domain.Sales;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -283,7 +284,7 @@ internal sealed class SupplierReturnEditorForm : Form
         FormClosing += (_, e) =>
         {
             if (!_busy && DialogResult != DialogResult.OK && _sheet is { SelectedLineCount: > 0 }
-                && MessageBox.Show(this, "Phiếu trả hàng chưa được lưu. Đóng và bỏ phiếu này?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+                && !ModernDialog.Confirm(this, "Phiếu trả hàng chưa được lưu. Đóng và bỏ phiếu này?", Text, "Bỏ phiếu", "Tiếp tục sửa", danger: true))
             {
                 e.Cancel = true;
             }
@@ -364,7 +365,7 @@ internal sealed class SupplierReturnEditorForm : Form
 
     private bool ConfirmDiscard() =>
         _sheet is not { SelectedLineCount: > 0 }
-        || MessageBox.Show(this, "Bỏ các sản phẩm đã chọn trên phiếu hiện tại?", Text, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+        || ModernDialog.Confirm(this, "Bỏ các sản phẩm đã chọn trên phiếu hiện tại?", Text, "Bỏ chọn", "Giữ lại", danger: true);
 
     private void UseSheet(SupplierReturnSheet sheet)
     {
@@ -730,7 +731,7 @@ internal sealed class SupplierReturnEditorForm : Form
         }
 
         var confirm = $"{_sheet.Summary}?\n\nHàng sẽ được xuất khỏi kho ngay và phiếu trả hàng không sửa được sau khi lưu.";
-        if (MessageBox.Show(this, confirm, "Trả hàng nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (ModernDialog.Show(this, confirm, "Trả hàng nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
         {
             return;
         }
@@ -755,7 +756,7 @@ internal sealed class SupplierReturnEditorForm : Form
 
             Posted = result.Value;
             var ret = result.Value.Return;
-            MessageBox.Show(
+            ModernDialog.Show(
                 this,
                 $"Đã lập phiếu trả hàng {ret.Code}.\n\n"
                 + $"Giá trị hàng trả: {Vnd.Format(ret.Total)}\n"

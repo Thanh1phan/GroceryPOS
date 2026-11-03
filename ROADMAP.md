@@ -35,7 +35,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Date-range picker control (`ModernDateRangePicker`: preset list + from/to + previous/next period, state in the tested `DateRangeSelection`)
 - [x] Modern grid wrapper with paging/search/sorting (`ModernDataGrid`: in-memory or provider-paged data, debounced accent-insensitive search, header sort cycle, pager with page links + page size, typed column helpers, toolbar slot, empty state)
 - [x] Card/panel (`ModernCard`, KPI `StatCard` with trend), sidebar navigation (`SidebarNav`: permission-filtered `NavMenu`, sections, badges, collapse to icons, keyboard), top bar (`TopBar`: title/breadcrumb, actions slot, notifications, theme toggle, user chip with avatar + menu), tab control (`ModernTabControl`: underline tabs, count badges, overflow arrows, cancelable `Selecting`, Ctrl+Tab), badge (`ModernBadge`, soft/solid, WCAG-checked)
-- [ ] Toast notifications, modal dialog, loading overlay
+- [x] Toast notifications (`Toaster`: queue with merge/×n, hover pause, action link, progress line), modal dialog (`ModernDialog`: themed `MessageBox` replacement, danger confirmations, details, dimmed owner via `ModalScrim`), loading overlay (`LoadingOverlay`: delayed/minimum-time spinner over a dimmed snapshot, input blocked) – all `MessageBox.Show` calls in the app migrated
 - [ ] BaseForm / BaseUserControl / BaseListView / BaseEditDialog
 
 ## M4 – Master data

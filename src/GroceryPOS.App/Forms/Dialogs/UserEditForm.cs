@@ -4,6 +4,7 @@ using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Application.Validation;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
@@ -137,7 +138,7 @@ internal sealed class UserEditForm : ModernDialogForm
                 return Result.Failure(created.Error);
             }
 
-            MessageBox.Show(this,
+            ModernDialog.Show(this,
                 $"Đã tạo tài khoản \"{created.Value.Username}\".\nMật khẩu tạm: {_password.Text}\n\nHãy đưa mật khẩu này cho người dùng; họ sẽ phải đổi ở lần đăng nhập đầu tiên.",
                 Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
             return Result.Success();

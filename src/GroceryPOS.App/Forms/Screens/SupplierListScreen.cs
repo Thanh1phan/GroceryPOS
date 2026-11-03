@@ -3,6 +3,7 @@ using GroceryPOS.Application.Partners;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -77,6 +78,7 @@ internal sealed class SupplierListScreen : UserControl
         using var dialog = new SupplierEditForm(_scopeFactory, supplier);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, supplier is null ? "Đã thêm nhà cung cấp mới." : $"Đã lưu nhà cung cấp {supplier.Name}.");
             _ = ReloadAsync();
         }
     }
@@ -89,8 +91,8 @@ internal sealed class SupplierListScreen : UserControl
         }
 
         if (supplier.IsActive
-            && MessageBox.Show(this, $"Ngừng giao dịch với \"{supplier.Name}\"?\nNhà cung cấp sẽ không còn trong danh sách chọn khi nhập hàng.",
-                "Nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            && !ModernDialog.Confirm(this, $"Ngừng giao dịch với \"{supplier.Name}\"?\nNhà cung cấp sẽ không còn trong danh sách chọn khi nhập hàng.",
+                "Nhà cung cấp", "Ngừng giao dịch", "Hủy"))
         {
             return;
         }
@@ -105,7 +107,7 @@ internal sealed class SupplierListScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Nhà cung cấp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Nhà cung cấp", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

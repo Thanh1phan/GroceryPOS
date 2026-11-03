@@ -3,6 +3,7 @@ using GroceryPOS.Application.Catalog;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,6 +66,7 @@ internal sealed class CategoryListScreen : UserControl
         using var dialog = new CategoryEditForm(_scopeFactory, category: null);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, "Đã thêm danh mục mới.");
             _ = ReloadAsync();
         }
     }
@@ -79,6 +81,7 @@ internal sealed class CategoryListScreen : UserControl
         using var dialog = new CategoryEditForm(_scopeFactory, category);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, $"Đã lưu danh mục {category.Name}.");
             _ = ReloadAsync();
         }
     }

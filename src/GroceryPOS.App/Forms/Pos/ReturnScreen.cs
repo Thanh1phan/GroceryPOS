@@ -1,3 +1,4 @@
+using GroceryPOS.UI.Controls.Feedback;
 using System.Globalization;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Common;
@@ -729,7 +730,7 @@ internal sealed class ReturnScreen : UserControl
     }
 
     private bool Confirm(string text) =>
-        MessageBox.Show(this, text, "Trả hàng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+        ModernDialog.Show(this, text, "Trả hàng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
 
     private static ModernButton ToolbarButton(string text, string? glyph, EventHandler onClick)
     {

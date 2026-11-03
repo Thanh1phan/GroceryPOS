@@ -8,6 +8,7 @@ using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -232,7 +233,7 @@ internal sealed class SupplierDebtScreen : UserControl
 
             if (result.IsFailure)
             {
-                MessageBox.Show(this, result.Error.Message, "Công nợ NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ModernDialog.Show(this, result.Error.Message, "Công nợ NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -280,7 +281,7 @@ internal sealed class SupplierDebtScreen : UserControl
 
         if (payments.IsFailure)
         {
-            MessageBox.Show(this, payments.Error.Message, "Công nợ NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, payments.Error.Message, "Công nợ NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -339,12 +340,10 @@ internal sealed class SupplierDebtScreen : UserControl
         using var dialog = new SupplierPaymentDialog(_scopeFactory, payable);
         if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Payment is { } payment)
         {
-            MessageBox.Show(
+            Toaster.Success(
                 this,
-                $"Đã lập phiếu chi {payment.Code}: {Vnd.Format(payment.Amount)} ({payment.MethodName}).\nCông nợ còn lại với {payment.SupplierName}: {Vnd.Format(payment.DebtAfter)}.",
-                "Trả nợ nhà cung cấp",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                $"Phiếu chi {payment.Code}: {Vnd.Format(payment.Amount)} ({payment.MethodName}). Còn nợ {payment.SupplierName}: {Vnd.Format(payment.DebtAfter)}.",
+                "Đã trả nợ nhà cung cấp");
             await ReloadAsync();
         }
     }
@@ -386,7 +385,7 @@ internal sealed class SupplierDebtScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Hủy phiếu chi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Hủy phiếu chi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -413,7 +412,7 @@ internal sealed class SupplierDebtScreen : UserControl
 
             if (stock.IsFailure || list.IsFailure)
             {
-                MessageBox.Show(this, (stock.IsFailure ? stock.Error : list.Error).Message, "Trả hàng NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                ModernDialog.Show(this, (stock.IsFailure ? stock.Error : list.Error).Message, "Trả hàng NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -444,7 +443,7 @@ internal sealed class SupplierDebtScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, "Trả hàng NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, "Trả hàng NCC", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 

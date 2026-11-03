@@ -1,6 +1,7 @@
 using GroceryPOS.Application.Users;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids.Core;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -144,7 +145,7 @@ internal sealed class RolePermissionScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -314,7 +315,7 @@ internal sealed class RolePermissionScreen : UserControl
             return true;
         }
 
-        MessageBox.Show(this, "Hãy lưu hoặc hoàn tác thay đổi phân quyền trước.", Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
+        ModernDialog.Show(this, "Hãy lưu hoặc hoàn tác thay đổi phân quyền trước.", Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
         return false;
     }
 
@@ -339,7 +340,7 @@ internal sealed class RolePermissionScreen : UserControl
             return;
         }
 
-        if (MessageBox.Show(this, $"Xóa vai trò \"{role.Name}\"?", Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        if (!ModernDialog.Confirm(this, $"Xóa vai trò \"{role.Name}\"? Thao tác này không hoàn tác được.", Caption, "Xóa vai trò", "Giữ lại", danger: true))
         {
             return;
         }
@@ -353,7 +354,7 @@ internal sealed class RolePermissionScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -377,7 +378,7 @@ internal sealed class RolePermissionScreen : UserControl
 
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             UpdateToolbarState();
             return;
         }

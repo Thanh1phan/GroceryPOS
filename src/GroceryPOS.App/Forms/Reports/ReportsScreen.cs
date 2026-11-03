@@ -1,4 +1,5 @@
 using GroceryPOS.App.Forms.Pos;
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Formatting;
@@ -7,6 +8,7 @@ using GroceryPOS.Application.Reports.Export;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -413,7 +415,7 @@ internal sealed class ReportsScreen : UserControl
 
         var version = _filterVersion;
         _loading = true;
-        UseWaitCursor = true;
+        var busy = LoadingOverlay.Begin(_tabs, "Đang tải báo cáo…");
         try
         {
             using var scope = _scopeFactory.CreateScope();
@@ -451,10 +453,7 @@ internal sealed class ReportsScreen : UserControl
         finally
         {
             _loading = false;
-            if (!IsDisposed)
-            {
-                UseWaitCursor = false;
-            }
+            busy.Dispose();
         }
 
         // The user may have switched tab or changed a filter while this one was loading.
@@ -636,53 +635,22 @@ internal sealed class ReportsScreen : UserControl
 
         using var scope = _scopeFactory.CreateScope();
         var exporter = scope.ServiceProvider.GetRequiredService<IReportExportService>();
-        UseWaitCursor = true;
-        var result = await exporter.ExportAsync(request);
+        var result = await LoadingOverlay.RunAsync(this, () => exporter.ExportAsync(request), "Đang tạo file Excel…");
         if (IsDisposed)
         {
             return;
         }
 
-        UseWaitCursor = false;
         if (result.IsFailure)
         {
-            MessageBox.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ModernDialog.Warning(this, result.Error.Message, Caption);
             return;
         }
 
-        using var dialog = new SaveFileDialog
+        var path = await ExcelFiles.SaveAsync(this, Caption, "Lưu báo cáo", result.Value.FileName, result.Value.Content);
+        if (path is not null && !IsDisposed)
         {
-            Title = "Lưu báo cáo",
-            Filter = "Excel (*.xlsx)|*.xlsx",
-            FileName = result.Value.FileName,
-            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-        };
-        if (dialog.ShowDialog(this) != DialogResult.OK)
-        {
-            return;
-        }
-
-        try
-        {
-            await File.WriteAllBytesAsync(dialog.FileName, result.Value.Content);
-        }
-        catch (IOException ex)
-        {
-            MessageBox.Show(this, $"Không lưu được file (có thể file đang mở trong Excel).\n{ex.Message}", Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        SetStatus($"Đã xuất {Path.GetFileName(dialog.FileName)}", LabelTone.Success);
-        if (MessageBox.Show(this, "Đã lưu báo cáo. Mở file ngay?", Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                // No spreadsheet app associated with .xlsx – the file is saved anyway.
-            }
+            SetStatus($"Đã xuất {Path.GetFileName(path)}", LabelTone.Success);
         }
     }
 
