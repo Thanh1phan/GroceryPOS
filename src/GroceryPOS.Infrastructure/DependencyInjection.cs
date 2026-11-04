@@ -2,6 +2,7 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Infrastructure.Auditing;
 using GroceryPOS.Infrastructure.Catalog;
 using GroceryPOS.Infrastructure.Reports;
+using GroceryPOS.Infrastructure.Sales;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Repositories;
@@ -20,11 +21,15 @@ public static class DependencyInjection
     /// <summary>
     /// Registers everything the application layer needs from Infrastructure: the database (<see cref="AddPersistence"/>),
     /// repositories, audit log, BCrypt password hashing and the start-up <see cref="IDatabaseInitializer"/>.
-    /// All database-bound services are scoped, so one scope = one unit of work.
+    /// All database-bound services are scoped, so one scope = one unit of work. Parked carts go to a per-machine
+    /// JSON file (<see cref="ParkedOrderOptions"/>).
     /// </summary>
     public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services, DatabaseOptions database, SeedOptions? seed = null)
+        this IServiceCollection services, DatabaseOptions database, SeedOptions? seed = null, ParkedOrderOptions? parkedOrders = null)
     {
+        var parkedPath = (parkedOrders ?? new ParkedOrderOptions()).ResolveFilePath();
+        services.TryAddSingleton<IParkedOrderStore>(sp =>
+            new JsonFileParkedOrderStore(parkedPath, sp.GetService<ILogger<JsonFileParkedOrderStore>>()));
         services.AddPersistence(database);
         services.TryAddSingleton(seed ?? new SeedOptions());
         services.TryAddSingleton<IPasswordHasher, BCryptPasswordHasher>();

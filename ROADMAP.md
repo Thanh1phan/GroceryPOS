@@ -49,7 +49,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Checkout use case (invoice numbering, stock deduction, loyalty earn/redeem, audit) + `ISaleRepository`
 - [x] Void sale use case (restock, loyalty reversal, audit) and POS lookup (barcode/code scan, quick search, member by phone)
 - [x] POS screen: barcode scan (`3*mã` quantity prefix), quick search (F3), cart with +/−/quantity/line discount/remove, invoice discount, member by phone + points redemption, cash/transfer/card, quick-cash buttons, change calculation, keyboard-first (F2–F9) – state in the tested `PosCart`
-- [ ] POS extras: park/resume orders (lưu tạm đơn), price check without selling, customer-facing total display
+- [x] POS extras: park/resume orders (lưu tạm đơn, F10/F11; `ParkedOrderService` + JSON `IParkedOrderStore`, re-priced on resume), price check without selling (F12), customer-facing display (`CustomerDisplayState`, second monitor)
 - [x] Loyalty earn/redeem at checkout (application layer + POS UI)
 - [x] Receipt print preview (80mm/58mm): `ReceiptService` + pure `ReceiptFormatter` (fixed-width, NFC-safe), preview after checkout, Ctrl+P reprint marked BẢN IN LẠI + audit, store info from `Store` settings
 - [x] Customer returns (phiếu trả `TH{yyMMdd}-{0001}`): partial/multiple returns per invoice, discount-aware refunds, restock or write-off, proportional loyalty reversal, return window (7 days; older needs `sales.void`), audit (application layer; UI pending)

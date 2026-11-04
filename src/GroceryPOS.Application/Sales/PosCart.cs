@@ -333,6 +333,38 @@ public sealed class PosCart
     }
 
     /// <summary>
+    /// Replaces the whole cart with a parked order (one <see cref="Changed"/> event). Lines are kept as they were –
+    /// a discounted line stays separate from an undiscounted one of the same product. Discounts are re-validated;
+    /// payment starts over (cash, exact amount, no points).
+    /// </summary>
+    public void Load(
+        IEnumerable<(PosProductDto Product, decimal Quantity, DiscountInput? Discount)> lines,
+        PosCustomer? customer = null,
+        DiscountInput? invoiceDiscount = null,
+        string? note = null)
+    {
+        ArgumentNullException.ThrowIfNull(lines);
+        var loaded = lines
+            .Select(l => new PosCartLine(l.Product ?? throw new ArgumentException("Missing product.", nameof(lines)), ValidateQuantity(l.Quantity))
+            {
+                Discount = Normalize(l.Discount),
+            })
+            .ToList();
+        var discount = Normalize(invoiceDiscount);
+
+        _lines.Clear();
+        _lines.AddRange(loaded);
+        Customer = customer;
+        InvoiceDiscount = discount;
+        PointsToRedeem = 0;
+        PaymentMethod = PaymentMethod.Cash;
+        CashTendered = null;
+        PaymentReference = null;
+        Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        OnChanged();
+    }
+
+    /// <summary>
     /// Quick "khách đưa" buttons: the exact total followed by the next amounts a customer can hand over with
     /// common notes (e.g. 87.000 → 87.000, 90.000, 100.000, 200.000, 500.000).
     /// </summary>

@@ -23,7 +23,8 @@ namespace GroceryPOS.App.Forms.Pos;
 /// Counter screen (Bán hàng). Left: scan box + cart. Right: member, totals, tender and pay.
 /// All state lives in the UI-free <see cref="PosCart"/>; this control renders it and maps keys:
 /// F2 quét mã · F3 tìm sản phẩm · F4 số lượng · F5 khách hàng · F6 giảm giá dòng · F7 giảm giá hóa đơn ·
-/// F8 khách đưa · F9 thanh toán · Ctrl+P in lại hóa đơn · +/− số lượng · Delete xóa dòng · Esc hủy đơn.
+/// F8 khách đưa · F9 thanh toán · F10 lưu tạm đơn · F11 đơn đang chờ · F12 kiểm tra giá · Ctrl+P in lại hóa đơn ·
+/// +/− số lượng · Delete xóa dòng · Esc hủy đơn. "Màn hình khách" opens the customer-facing display (second monitor).
 /// When <see cref="SalesOptions.RequireOpenShift"/> is on, the cashier is asked to open a shift on entry and cannot pay without one.
 /// </summary>
 internal sealed class PosScreen : UserControl
@@ -45,6 +46,10 @@ internal sealed class PosScreen : UserControl
     private readonly ModernButton _quantity;
     private readonly ModernButton _lineDiscount;
     private readonly ModernButton _removeLine;
+    private readonly ModernButton _park;
+    private readonly ModernButton _parked;
+    private readonly ModernButton _customerDisplay;
+    private readonly TimeProvider _clock;
 
     private readonly ModernTextBox _phone;
     private readonly ToneLabel _customerInfo;
@@ -75,6 +80,9 @@ internal sealed class PosScreen : UserControl
     private decimal _quickCashTotal = -1;
     private string? _lastInvoiceCode;
     private ShiftSummaryDto? _shift;
+    private CustomerDisplayForm? _display;
+    private PosCartLine? _lastTouched;
+    private bool _showingThanks;
     private string? _shiftProblem;
 
     public PosScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
@@ -89,6 +97,7 @@ internal sealed class PosScreen : UserControl
             _options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
             _cart = new PosCart(_options.Loyalty);
             _store = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
+            _clock = scope.ServiceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
         }
 
         // ---- Left: scan box, status, cart ---------------------------------------------------------
@@ -144,7 +153,13 @@ internal sealed class PosScreen : UserControl
         _removeLine = ToolbarButton("Xóa dòng (Del)", Glyphs.Delete, (_, _) => RemoveLine());
         _removeLine.Variant = ButtonVariant.Danger;
         var reprint = ToolbarButton("In lại HĐ (Ctrl+P)", Glyphs.Print, async (_, _) => await ReprintAsync());
-        _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine, reprint]);
+        _park = ToolbarButton("Lưu tạm (F10)", Glyphs.Save, async (_, _) => await ParkAsync());
+        _parked = ToolbarButton("Đơn chờ (F11) · 00", Glyphs.History, async (_, _) => await ShowParkedAsync());
+        _parked.Text = "Đơn chờ (F11)";
+        var priceCheck = ToolbarButton("Kiểm giá (F12)", Glyphs.Search, (_, _) => PriceCheck());
+        _customerDisplay = ToolbarButton("Màn hình khách: tắt", Glyphs.Shop, (_, _) => ToggleCustomerDisplay());
+        _customerDisplay.Text = "Màn hình khách";
+        _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine, reprint, _park, _parked, priceCheck, _customerDisplay]);
 
         // ---- Shift bar: current shift, or "Mở ca" when none is open ------------------------------
         _shiftInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 10, 12, 0), Text = "Đang kiểm tra ca làm việc…" };
@@ -310,10 +325,12 @@ internal sealed class PosScreen : UserControl
         Controls.Add(sideHost);
 
         _cart.Changed += (_, _) => Render();
+        Disposed += (_, _) => _display?.Close();
         Load += async (_, _) =>
         {
             Render();
             FocusScan();
+            await RefreshParkedCountAsync();
             await LoadShiftAsync(promptToOpen: true);
         };
     }
@@ -450,6 +467,15 @@ internal sealed class PosScreen : UserControl
             case Keys.F9:
                 _ = CheckoutAsync();
                 return true;
+            case Keys.F10:
+                _ = ParkAsync();
+                return true;
+            case Keys.F11:
+                _ = ShowParkedAsync();
+                return true;
+            case Keys.F12:
+                PriceCheck();
+                return true;
             case Keys.Control | Keys.P:
                 _ = ReprintAsync();
                 return true;
@@ -540,6 +566,8 @@ internal sealed class PosScreen : UserControl
         }
 
         _grid.SelectItem(line);
+        _lastTouched = line;
+        UpdateCustomerDisplay();
         var text = $"Đã thêm {line.Name} × {line.Quantity.ToString("0.###", Vnd.Culture)} – {Vnd.Format(line.NetAmount)}";
         ShowStatus(line.ExceedsStock ? $"{text} (vượt tồn kho: còn {product.StockQuantity.ToString("0.###", Vnd.Culture)})" : text,
             line.ExceedsStock ? LabelTone.Warning : LabelTone.Success);
@@ -772,6 +800,8 @@ internal sealed class PosScreen : UserControl
             _phone.Clear();
             _phone.ClearValidation();
             _lastInvoiceCode = receipt.Code;
+            _showingThanks = true;
+            _display?.Render(CustomerDisplayState.ThankYou(_store.Name, receipt.Total, receipt.AmountPaid, receipt.Change, receipt.PointsEarned));
             ShowStatus(DescribeReceipt(receipt), LabelTone.Success);
             if (_store.PreviewReceiptAfterCheckout)
             {
@@ -899,10 +929,192 @@ internal sealed class PosScreen : UserControl
         FocusScan();
     }
 
+    // ---- Parked orders, price check, customer display ----------------------------------------------
+
+    /// <summary>Lưu tạm (F10): puts the cart on hold so the next customer can be served.</summary>
+    private async Task ParkAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        if (_cart.IsEmpty)
+        {
+            ShowStatus("Giỏ hàng đang trống – không có gì để lưu tạm.", LabelTone.Muted);
+            FocusScan();
+            return;
+        }
+
+        var defaultLabel = _cart.Customer?.Name ?? "Đơn tạm";
+        using (var dialog = new ParkOrderDialog(_cart.Lines.Count, _cart.Total, defaultLabel))
+        {
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+            {
+                FocusScan();
+                return;
+            }
+
+            await ParkCurrentAsync(dialog.OrderLabel);
+        }
+
+        FocusScan();
+    }
+
+    /// <summary>Parks the current cart; false (with the reason shown) when it could not be parked.</summary>
+    private async Task<bool> ParkCurrentAsync(string? label)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ParkAsync(_cart, label);
+        if (IsDisposed)
+        {
+            return false;
+        }
+
+        if (result.IsFailure)
+        {
+            ModernDialog.Warning(this, result.Error.Message, "Lưu tạm đơn");
+            return false;
+        }
+
+        _phone.Clear();
+        _phone.ClearValidation();
+        ShowStatus($"Đã lưu tạm \"{result.Value.Label}\" ({result.Value.LineCount} mặt hàng). Nhấn F11 để gọi lại.", LabelTone.Success);
+        Toaster.Info(this, $"{result.Value.Label} · {Vnd.Format(result.Value.Total)}", "Đã lưu tạm đơn");
+        await RefreshParkedCountAsync();
+        return true;
+    }
+
+    /// <summary>Đơn chờ (F11): pick a parked order; a cart in progress is parked first so nothing is lost.</summary>
+    private async Task ShowParkedAsync()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        Guid? chosen;
+        using (var dialog = new ParkedOrdersDialog(_scopeFactory, _clock, _options.StoreUtcOffset, cartBusy: !_cart.IsEmpty))
+        {
+            var answer = dialog.ShowDialog(this);
+            SetParkedCount(dialog.RemainingCount);
+            chosen = answer == DialogResult.OK ? dialog.SelectedOrderId : null;
+        }
+
+        if (chosen is { } id)
+        {
+            if (!_cart.IsEmpty && !await ParkCurrentAsync(null))
+            {
+                FocusScan();
+                return;
+            }
+
+            using var scope = _scopeFactory.CreateScope();
+            var result = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ResumeAsync(id, _cart);
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (result.IsFailure)
+            {
+                ModernDialog.Warning(this, result.Error.Message, "Gọi lại đơn");
+            }
+            else
+            {
+                var resumed = result.Value;
+                _phone.Text = _cart.Customer?.Phone ?? string.Empty;
+                ShowStatus($"Đã gọi lại \"{resumed.Order.Label}\" ({resumed.RestoredLines} mặt hàng).",
+                    resumed.HasNotices ? LabelTone.Warning : LabelTone.Success);
+                if (resumed.HasNotices)
+                {
+                    ModernDialog.Warning(this, string.Join("\n", resumed.Notices), "Đơn đã thay đổi từ lúc lưu tạm");
+                }
+            }
+
+            await RefreshParkedCountAsync();
+        }
+
+        FocusScan();
+    }
+
+    private async Task RefreshParkedCountAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var orders = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ListAsync();
+        if (!IsDisposed)
+        {
+            SetParkedCount(orders.Count);
+        }
+    }
+
+    private void SetParkedCount(int count)
+    {
+        _parked.Text = count > 0 ? $"Đơn chờ (F11) · {count}" : "Đơn chờ (F11)";
+        _parked.Variant = count > 0 ? ButtonVariant.Primary : ButtonVariant.Secondary;
+    }
+
+    /// <summary>Kiểm tra giá (F12): look up price and stock without selling; optionally add the product.</summary>
+    private void PriceCheck()
+    {
+        using (var dialog = new PriceCheckDialog(_scopeFactory, canAdd: true))
+        {
+            if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedProduct is { } product)
+            {
+                AddToCart(product, 1);
+            }
+        }
+
+        FocusScan();
+    }
+
+    private void ToggleCustomerDisplay()
+    {
+        if (_display is { IsDisposed: false })
+        {
+            _display.Close();
+            return;
+        }
+
+        _display = new CustomerDisplayForm();
+        _display.FormClosed += (_, _) =>
+        {
+            _display = null;
+            if (!IsDisposed)
+            {
+                _customerDisplay.Variant = ButtonVariant.Secondary;
+            }
+        };
+        _customerDisplay.Variant = ButtonVariant.Primary;
+        UpdateCustomerDisplay();
+        _display.Show(); // not owned: an owned window would stay on top of the counter
+        FocusScan();
+    }
+
+    private void UpdateCustomerDisplay()
+    {
+        if (_display is not { IsDisposed: false } display)
+        {
+            return;
+        }
+
+        if (!_cart.IsEmpty)
+        {
+            _showingThanks = false;
+        }
+        else if (_showingThanks)
+        {
+            return; // keep "Cảm ơn quý khách / tiền thừa" until the next scan
+        }
+
+        display.Render(CustomerDisplayState.FromCart(_cart, _store.Name, _lastTouched));
+    }
+
     // ---- Rendering ---------------------------------------------------------------------------------
 
     private void Render()
     {
+        UpdateCustomerDisplay();
         _rendering = true;
         try
         {

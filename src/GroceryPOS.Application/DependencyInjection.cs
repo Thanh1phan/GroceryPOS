@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IInvoiceNumberGenerator, InvoiceNumberGenerator>();
         services.AddScoped<ICheckoutService, CheckoutService>();
         services.AddScoped<IPosLookupService, PosLookupService>();
+        services.AddScoped<IParkedOrderService, ParkedOrderService>();
         services.AddScoped<IReceiptService, ReceiptService>();
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IShiftService, ShiftService>();

@@ -6,6 +6,7 @@ using GroceryPOS.Infrastructure;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Seeding;
+using GroceryPOS.Infrastructure.Sales;
 using GroceryPOS.UI.Controls.Feedback;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,11 +32,12 @@ internal static class Program
         var database = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
         var logging = configuration.GetSection(LoggingOptions.SectionName).Get<LoggingOptions>() ?? new LoggingOptions();
         var seed = configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
+        var parkedOrders = configuration.GetSection(ParkedOrderOptions.SectionName).Get<ParkedOrderOptions>();
         var store = configuration.GetSection(StoreProfile.SectionName).Get<StoreProfile>() ?? StoreProfile.Default;
 
         var services = new ServiceCollection();
         services.AddGroceryLogging(logging);
-        services.AddInfrastructure(database, seed);
+        services.AddInfrastructure(database, seed, parkedOrders);
         services.AddApplication(store: store);
         using var provider = services.BuildServiceProvider();
 
