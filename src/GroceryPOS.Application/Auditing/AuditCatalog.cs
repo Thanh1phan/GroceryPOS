@@ -14,6 +14,7 @@ public enum AuditCategory
     Purchasing = 6,
     Shifts = 7,
     ReportsAndData = 8,
+    System = 9,
     Other = 99,
 }
 
@@ -79,6 +80,7 @@ public static class AuditCatalog
         new(AuditActions.CashMoved, "Nộp/chi tiền két", AuditCategory.Shifts, AuditSeverity.Warning),
         new(AuditActions.ReportExported, "Xuất báo cáo", AuditCategory.ReportsAndData, AuditSeverity.Info),
         new(AuditActions.AuditLogExported, "Xuất nhật ký hệ thống", AuditCategory.ReportsAndData, AuditSeverity.Warning),
+        new(AuditActions.SettingsChanged, "Thay đổi cấu hình", AuditCategory.System, AuditSeverity.Warning),
     ];
 
     private static readonly Dictionary<string, AuditActionInfo> ByKey = Known.ToDictionary(a => a.Key, StringComparer.Ordinal);
@@ -97,6 +99,7 @@ public static class AuditCatalog
         ["SupplierPayment"] = "Phiếu chi",
         ["SupplierReturn"] = "Phiếu trả NCC",
         ["Shift"] = "Ca làm việc",
+        ["Settings"] = "Cấu hình",
     };
 
     /// <summary>Every known action, in catalog order.</summary>
@@ -107,7 +110,7 @@ public static class AuditCatalog
     [
         AuditCategory.Authentication, AuditCategory.UsersAndRoles, AuditCategory.Sales, AuditCategory.Catalog,
         AuditCategory.Partners, AuditCategory.Inventory, AuditCategory.Purchasing, AuditCategory.Shifts,
-        AuditCategory.ReportsAndData,
+        AuditCategory.ReportsAndData, AuditCategory.System,
     ];
 
     public static bool IsKnown(string action) => ByKey.ContainsKey(action);
@@ -133,6 +136,7 @@ public static class AuditCatalog
         AuditCategory.Purchasing => "Nhập hàng & công nợ",
         AuditCategory.Shifts => "Ca & két tiền",
         AuditCategory.ReportsAndData => "Báo cáo & xuất dữ liệu",
+        AuditCategory.System => "Cấu hình hệ thống",
         _ => "Khác",
     };
 

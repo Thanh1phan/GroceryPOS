@@ -1,7 +1,9 @@
 using GroceryPOS.App.Forms;
+using GroceryPOS.App.Preferences;
 using GroceryPOS.Application;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Common;
+using GroceryPOS.Application.Settings;
 using GroceryPOS.Infrastructure;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
@@ -45,12 +47,16 @@ internal static class Program
         {
             var initializer = scope.ServiceProvider.GetRequiredService<IDatabaseInitializer>();
             initializer.InitializeAsync().GetAwaiter().GetResult();
+
+            // Overlay the settings saved on the Cấu hình screen (store info, receipt, loyalty, sales rules).
+            scope.ServiceProvider.GetRequiredService<ISettingsService>().ReloadAsync().GetAwaiter().GetResult();
         }
 
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var currentUser = provider.GetRequiredService<ICurrentUser>();
         var logger = provider.GetRequiredService<Serilog.ILogger>();
         Log.Logger = logger; // static Log for UI code that has no injected logger (e.g. printing)
+        UiPreferences.Initialize(); // saved light/dark theme of this machine
 
         void ReportUnhandled(Exception exception, bool onUiThread)
         {

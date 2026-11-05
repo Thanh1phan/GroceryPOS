@@ -2,7 +2,7 @@ using GroceryPOS.Domain.Partners;
 
 namespace GroceryPOS.Application.Sales;
 
-/// <summary>Store-level sales settings (later editable from the Settings screen).</summary>
+/// <summary>Store-level sales settings; the loyalty policy and sales rules are editable on the Cấu hình screen (<c>StoreSettings</c>).</summary>
 public sealed record SalesOptions
 {
     public static SalesOptions Default { get; } = new();

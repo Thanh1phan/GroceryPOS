@@ -11,6 +11,7 @@ using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Reports.Export;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Sales.Receipts;
+using GroceryPOS.Application.Settings;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Domain.Identity;
@@ -23,16 +24,20 @@ public static class DependencyInjection
 {
     /// <summary>
     /// Registers the use cases, the desktop session (singleton <see cref="IUserSessionStore"/>, also exposed as
-    /// <see cref="ICurrentUser"/>), store settings and every FluentValidation validator of this assembly.
+    /// <see cref="ICurrentUser"/>), live store settings (<see cref="StoreSettingsState"/>) and every FluentValidation validator of this assembly.
     /// Use cases are scoped so they share the scope's unit of work with the repositories.
     /// </summary>
     public static IServiceCollection AddApplication(
         this IServiceCollection services, SalesOptions? sales = null, LockoutPolicy? lockout = null, StoreProfile? store = null)
     {
         services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton(sales ?? SalesOptions.Default);
         services.TryAddSingleton(lockout ?? LockoutPolicy.Default);
-        services.TryAddSingleton(store ?? StoreProfile.Default);
+
+        // Store profile and sales options come from the live settings (appsettings.json defaults + values saved on
+        // the Cấu hình screen); resolved per use, so a scope created after a save sees the new values.
+        services.TryAddSingleton(new StoreSettingsState(store, sales));
+        services.TryAddTransient(sp => sp.GetRequiredService<StoreSettingsState>().Store);
+        services.TryAddTransient(sp => sp.GetRequiredService<StoreSettingsState>().Sales);
 
         services.TryAddSingleton<IUserSessionStore, UserSessionStore>();
         services.TryAddSingleton<ICurrentUser>(sp => sp.GetRequiredService<IUserSessionStore>());
@@ -60,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<ICustomerService, CustomerService>();
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IRoleService, RoleService>();
+        services.AddScoped<ISettingsService, SettingsService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton, includeInternalTypes: false);
         return services;

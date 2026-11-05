@@ -6,6 +6,7 @@ using GroceryPOS.Domain.Inventory;
 using GroceryPOS.Domain.Partners;
 using GroceryPOS.Domain.Purchasing;
 using GroceryPOS.Domain.Sales;
+using GroceryPOS.Domain.Settings;
 using GroceryPOS.Domain.Shifts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -38,6 +39,7 @@ public class GroceryDbContext : DbContext, IUnitOfWork
     public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
     public DbSet<SupplierReturn> SupplierReturns => Set<SupplierReturn>();
     public DbSet<Shift> Shifts => Set<Shift>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) =>
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(GroceryDbContext).Assembly);

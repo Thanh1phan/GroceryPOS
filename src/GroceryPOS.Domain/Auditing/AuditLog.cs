@@ -77,4 +77,5 @@ public static class AuditActions
     public const string CashMoved = "shift.cash_movement";
     public const string ReportExported = "report.exported";
     public const string AuditLogExported = "auditlog.exported";
+    public const string SettingsChanged = "settings.changed";
 }

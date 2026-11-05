@@ -78,6 +78,6 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Audit log viewer (Nhật ký hệ thống): `IAuditLogService` + `IAuditLogRepository` (server-side filter/paging/LIKE search), `AuditCatalog` (Vietnamese names, groups, severities), KPI summary, detail card, Excel export (audited)
 
 ## M8 – Polish
-- [ ] Settings screen (store info, receipt footer, loyalty policy, theme)
+- [x] Settings screen (Cấu hình: store info, receipt footer/paper with live preview, loyalty policy, sales rules; stored in `AppSettings`, audited; per-machine theme)
 - [ ] Database backup/restore
 - [ ] Installer/publish profile

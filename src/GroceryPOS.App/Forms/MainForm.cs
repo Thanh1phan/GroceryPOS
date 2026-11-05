@@ -6,6 +6,7 @@ using GroceryPOS.App.Forms.Reports;
 using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.App.Forms.Dashboard;
 using GroceryPOS.App.Forms.Screens;
+using GroceryPOS.App.Forms.Settings;
 using GroceryPOS.App.Forms.Shifts;
 using GroceryPOS.Domain.Identity;
 using GroceryPOS.UI.Controls.Icons;
@@ -151,6 +152,7 @@ public sealed class MainForm : Form
             "shifts" => new ShiftScreen(_scopeFactory, _currentUser),
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
+            "settings" => new SettingsScreen(_scopeFactory),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;

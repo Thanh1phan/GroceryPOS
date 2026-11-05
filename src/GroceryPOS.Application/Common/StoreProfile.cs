@@ -2,7 +2,7 @@ namespace GroceryPOS.Application.Common;
 
 /// <summary>
 /// Store identity printed on receipts and documents (tên cửa hàng, địa chỉ, điện thoại, MST, lời cảm ơn).
-/// Bound from the <c>Store</c> section of appsettings.json; later editable from the Settings screen.
+/// Defaults bound from the <c>Store</c> section of appsettings.json; overridden by the values saved on the Cấu hình screen.
 /// </summary>
 public sealed record StoreProfile
 {
