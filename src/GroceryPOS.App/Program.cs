@@ -2,6 +2,7 @@ using GroceryPOS.App.Forms;
 using GroceryPOS.App.Preferences;
 using GroceryPOS.Application;
 using GroceryPOS.Application.Abstractions;
+using GroceryPOS.Application.Backup;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Infrastructure;
@@ -36,11 +37,12 @@ internal static class Program
         var seed = configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
         var parkedOrders = configuration.GetSection(ParkedOrderOptions.SectionName).Get<ParkedOrderOptions>();
         var store = configuration.GetSection(StoreProfile.SectionName).Get<StoreProfile>() ?? StoreProfile.Default;
+        var backup = configuration.GetSection(BackupOptions.SectionName).Get<BackupOptions>() ?? new BackupOptions();
 
         var services = new ServiceCollection();
         services.AddGroceryLogging(logging);
         services.AddInfrastructure(database, seed, parkedOrders);
-        services.AddApplication(store: store);
+        services.AddApplication(store: store, backup: backup);
         using var provider = services.BuildServiceProvider();
 
         using (var scope = provider.CreateScope())
@@ -51,6 +53,8 @@ internal static class Program
             // Overlay the settings saved on the Cấu hình screen (store info, receipt, loyalty, sales rules).
             scope.ServiceProvider.GetRequiredService<ISettingsService>().ReloadAsync().GetAwaiter().GetResult();
         }
+
+        RunAutomaticBackup(provider);
 
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var currentUser = provider.GetRequiredService<ICurrentUser>();
@@ -111,6 +115,32 @@ internal static class Program
 
             using var main = new MainForm(scopeFactory, currentUser);
             System.Windows.Forms.Application.Run(main);
+        }
+    }
+
+    /// <summary>
+    /// Daily safety net: backs the database up at start-up when the newest backup is older than <c>Backup:AutomaticIntervalHours</c>.
+    /// A failure is logged and never blocks selling.
+    /// </summary>
+    private static void RunAutomaticBackup(ServiceProvider provider)
+    {
+        var logger = provider.GetRequiredService<Serilog.ILogger>();
+        try
+        {
+            using var scope = provider.CreateScope();
+            var result = scope.ServiceProvider.GetRequiredService<IBackupService>().RunAutomaticIfDueAsync().GetAwaiter().GetResult();
+            if (result.IsFailure)
+            {
+                logger.Warning("Sao lưu tự động không thành công: {Error}", result.Error.Message);
+            }
+            else if (result.Value is { } file)
+            {
+                logger.Information("Sao lưu tự động: {File} ({Size})", file.FullPath, file.SizeText);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.Error(ex, "Sao lưu tự động bị lỗi");
         }
     }
 }

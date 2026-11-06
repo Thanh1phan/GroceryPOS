@@ -35,6 +35,7 @@ public static class Permissions
     public const string ReportsView = "reports.view";
     public const string AuditLogView = "auditlog.view";
     public const string SettingsManage = "settings.manage";
+    public const string SystemBackup = "system.backup";
 
     public static readonly IReadOnlyDictionary<string, string> DisplayNames = new Dictionary<string, string>
     {
@@ -62,6 +63,7 @@ public static class Permissions
         [ReportsView] = "Xem báo cáo",
         [AuditLogView] = "Xem nhật ký hệ thống",
         [SettingsManage] = "Cấu hình hệ thống",
+        [SystemBackup] = "Sao lưu & phục hồi dữ liệu",
     };
 
     /// <summary>
@@ -69,7 +71,7 @@ public static class Permissions
     /// </summary>
     public static IReadOnlyList<PermissionGroup> Groups { get; } = new[]
     {
-        new PermissionGroup("Hệ thống", new[] { DashboardView, UsersView, UsersManage, RolesManage, AuditLogView, SettingsManage }),
+        new PermissionGroup("Hệ thống", new[] { DashboardView, UsersView, UsersManage, RolesManage, AuditLogView, SettingsManage, SystemBackup }),
         new PermissionGroup("Hàng hóa", new[] { CategoriesManage, ProductsView, ProductsManage, PricesChange }),
         new PermissionGroup("Đối tác", new[] { CustomersView, CustomersManage, SuppliersManage, SupplierPaymentsManage }),
         new PermissionGroup("Bán hàng", new[] { SalesCreate, SalesDiscount, SalesVoid, ReturnsCreate, ShiftsManage, ShiftsSupervise }),

@@ -52,6 +52,7 @@ public sealed class MainForm : Form
             new NavItem("roles", "Phân quyền", Glyphs.Admin, new[] { Permissions.RolesManage }),
             new NavItem("audit-log", "Nhật ký hệ thống", Glyphs.History, new[] { Permissions.AuditLogView }),
             new NavItem("settings", "Cấu hình", Glyphs.Settings, new[] { Permissions.SettingsManage }),
+            new NavItem("backup", "Sao lưu dữ liệu", Glyphs.Save, new[] { Permissions.SystemBackup }),
         }),
     });
 
@@ -153,6 +154,7 @@ public sealed class MainForm : Form
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
             "settings" => new SettingsScreen(_scopeFactory),
+            "backup" => new BackupScreen(_scopeFactory),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;

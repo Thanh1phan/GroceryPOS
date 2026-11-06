@@ -78,4 +78,7 @@ public static class AuditActions
     public const string ReportExported = "report.exported";
     public const string AuditLogExported = "auditlog.exported";
     public const string SettingsChanged = "settings.changed";
+    public const string BackupCreated = "backup.created";
+    public const string BackupRestored = "backup.restored";
+    public const string BackupDeleted = "backup.deleted";
 }

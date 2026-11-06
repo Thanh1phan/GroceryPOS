@@ -79,5 +79,5 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 
 ## M8 – Polish
 - [x] Settings screen (Cấu hình: store info, receipt footer/paper with live preview, loyalty policy, sales rules; stored in `AppSettings`, audited; per-machine theme)
-- [ ] Database backup/restore
+- [x] Database backup/restore (Sao lưu dữ liệu: manual + daily automatic backup at start-up with retention, file check, restore with safety copy and restart, copy to USB; `system.backup`, audited)
 - [ ] Installer/publish profile

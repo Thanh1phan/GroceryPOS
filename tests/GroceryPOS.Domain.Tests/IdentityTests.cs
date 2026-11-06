@@ -105,6 +105,15 @@ public class RoleTests
     }
 
     [Fact]
+    public void Only_admin_can_back_up_and_restore_by_default()
+    {
+        Assert.Contains(Permissions.SystemBackup, SystemRoles.DefaultPermissions[SystemRoles.Admin]);
+        Assert.DoesNotContain(Permissions.SystemBackup, SystemRoles.DefaultPermissions[SystemRoles.Manager]);
+        Assert.DoesNotContain(Permissions.SystemBackup, SystemRoles.DefaultPermissions[SystemRoles.Cashier]);
+        Assert.Equal("Sao lưu & phục hồi dữ liệu", Permissions.DisplayNames[Permissions.SystemBackup]);
+    }
+
+    [Fact]
     public void Every_permission_is_in_exactly_one_group()
     {
         var grouped = Permissions.Groups.SelectMany(g => g.Keys).ToList();

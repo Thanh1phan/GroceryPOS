@@ -1,5 +1,6 @@
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Infrastructure.Auditing;
+using GroceryPOS.Infrastructure.Backup;
 using GroceryPOS.Infrastructure.Catalog;
 using GroceryPOS.Infrastructure.Reports;
 using GroceryPOS.Infrastructure.Sales;
@@ -76,10 +77,12 @@ public static class DependencyInjection
             case DatabaseProvider.Sqlite:
                 services.AddDbContext<GroceryDbContext, SqliteGroceryDbContext>((sp, builder) =>
                     Configure(builder.UseSqlite(options.ConnectionString, DbContextFactories.Sqlite), sp, options));
+                services.AddScoped<IDatabaseBackupEngine, SqliteBackupEngine>();
                 break;
             case DatabaseProvider.SqlServer:
                 services.AddDbContext<GroceryDbContext, SqlServerGroceryDbContext>((sp, builder) =>
                     Configure(builder.UseSqlServer(options.ConnectionString, DbContextFactories.SqlServer), sp, options));
+                services.AddScoped<IDatabaseBackupEngine, SqlServerBackupEngine>();
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(options), options.Provider, "Unknown database provider.");

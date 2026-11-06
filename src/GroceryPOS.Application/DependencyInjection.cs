@@ -4,6 +4,7 @@ using GroceryPOS.Application.Authentication;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Auditing;
+using GroceryPOS.Application.Backup;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
@@ -28,10 +29,12 @@ public static class DependencyInjection
     /// Use cases are scoped so they share the scope's unit of work with the repositories.
     /// </summary>
     public static IServiceCollection AddApplication(
-        this IServiceCollection services, SalesOptions? sales = null, LockoutPolicy? lockout = null, StoreProfile? store = null)
+        this IServiceCollection services, SalesOptions? sales = null, LockoutPolicy? lockout = null, StoreProfile? store = null,
+        BackupOptions? backup = null)
     {
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton(lockout ?? LockoutPolicy.Default);
+        services.TryAddSingleton(backup ?? new BackupOptions());
 
         // Store profile and sales options come from the live settings (appsettings.json defaults + values saved on
         // the Cấu hình screen); resolved per use, so a scope created after a save sees the new values.
@@ -66,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IUserManagementService, UserManagementService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<ISettingsService, SettingsService>();
+        services.AddScoped<IBackupService, BackupService>();
 
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly, ServiceLifetime.Singleton, includeInternalTypes: false);
         return services;

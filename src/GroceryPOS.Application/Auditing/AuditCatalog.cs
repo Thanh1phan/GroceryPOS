@@ -81,6 +81,9 @@ public static class AuditCatalog
         new(AuditActions.ReportExported, "Xuất báo cáo", AuditCategory.ReportsAndData, AuditSeverity.Info),
         new(AuditActions.AuditLogExported, "Xuất nhật ký hệ thống", AuditCategory.ReportsAndData, AuditSeverity.Warning),
         new(AuditActions.SettingsChanged, "Thay đổi cấu hình", AuditCategory.System, AuditSeverity.Warning),
+        new(AuditActions.BackupCreated, "Sao lưu dữ liệu", AuditCategory.System, AuditSeverity.Info),
+        new(AuditActions.BackupRestored, "Phục hồi dữ liệu", AuditCategory.System, AuditSeverity.Critical),
+        new(AuditActions.BackupDeleted, "Xóa bản sao lưu", AuditCategory.System, AuditSeverity.Warning),
     ];
 
     private static readonly Dictionary<string, AuditActionInfo> ByKey = Known.ToDictionary(a => a.Key, StringComparer.Ordinal);
@@ -100,6 +103,7 @@ public static class AuditCatalog
         ["SupplierReturn"] = "Phiếu trả NCC",
         ["Shift"] = "Ca làm việc",
         ["Settings"] = "Cấu hình",
+        ["Backup"] = "Bản sao lưu",
     };
 
     /// <summary>Every known action, in catalog order.</summary>

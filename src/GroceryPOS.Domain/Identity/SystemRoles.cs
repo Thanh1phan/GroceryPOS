@@ -13,7 +13,7 @@ public static class SystemRoles
         {
             [Admin] = Permissions.All,
             [Manager] = Permissions.All
-                .Where(p => p is not Permissions.RolesManage and not Permissions.SettingsManage)
+                .Where(p => p is not Permissions.RolesManage and not Permissions.SettingsManage and not Permissions.SystemBackup)
                 .ToArray(),
             [Cashier] = new[]
             {
