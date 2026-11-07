@@ -73,7 +73,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Report queries (application layer): daily revenue with returns/voids/VAT/COGS/profit and tender split, best sellers (by quantity/revenue/profit, category filter, revenue share), profit by category, inventory value by category (cost/retail/potential profit, out/low/negative stock)
 - [x] Dashboard query: today vs. yesterday, 7-day trend, sales by hour, top 5 products, low-stock (profit only with `reports.view`)
 - [x] Report screens (Báo cáo): period picker, revenue KPIs vs. previous period + chart + table, best sellers, profit by category, inventory value; Excel export per tab or all tabs (`IReportExportService`, audited)
-- [ ] Report PDF export / print preview
+- [x] Report PDF export / print preview (A4 preview, print with page range, PDF via Microsoft Print to PDF, tested pagination)
 - [x] Dashboard screen (KPI cards incl. own shift, 7-day chart, hourly chart, top products, low-stock list, quick actions, auto-refresh) + `BarChart` control
 - [x] Audit log viewer (Nhật ký hệ thống): `IAuditLogService` + `IAuditLogRepository` (server-side filter/paging/LIKE search), `AuditCatalog` (Vietnamese names, groups, severities), KPI summary, detail card, Excel export (audited)
 

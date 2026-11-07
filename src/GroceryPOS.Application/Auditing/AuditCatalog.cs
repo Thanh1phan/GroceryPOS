@@ -79,6 +79,7 @@ public static class AuditCatalog
         new(AuditActions.ShiftClosed, "Kết ca", AuditCategory.Shifts, AuditSeverity.Info),
         new(AuditActions.CashMoved, "Nộp/chi tiền két", AuditCategory.Shifts, AuditSeverity.Warning),
         new(AuditActions.ReportExported, "Xuất báo cáo", AuditCategory.ReportsAndData, AuditSeverity.Info),
+        new(AuditActions.ReportPrinted, "In báo cáo / PDF", AuditCategory.ReportsAndData, AuditSeverity.Info),
         new(AuditActions.AuditLogExported, "Xuất nhật ký hệ thống", AuditCategory.ReportsAndData, AuditSeverity.Warning),
         new(AuditActions.SettingsChanged, "Thay đổi cấu hình", AuditCategory.System, AuditSeverity.Warning),
         new(AuditActions.BackupCreated, "Sao lưu dữ liệu", AuditCategory.System, AuditSeverity.Info),

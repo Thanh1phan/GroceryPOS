@@ -24,7 +24,8 @@ namespace GroceryPOS.App.Forms.Reports;
 /// day table), Hàng bán chạy (rank by quantity/revenue/profit, category, top N), Lợi nhuận theo danh mục (chart +
 /// table) and Giá trị tồn kho (current stock, ignores the period). Only the visible tab is loaded; the others
 /// reload when shown after a filter change. Xuất Excel (Ctrl+E) exports the current tab, "Xuất tất cả" every tab
-/// as one workbook (sheet per report, audited). F5 reloads.
+/// as one workbook (sheet per report, audited). In / PDF (Ctrl+P) opens an A4 print preview of the current tab
+/// (Ctrl+Shift+P: every tab) that prints or saves a PDF, audited as report.printed. F5 reloads.
 /// </summary>
 internal sealed class ReportsScreen : UserControl
 {
@@ -89,8 +90,9 @@ internal sealed class ReportsScreen : UserControl
         var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAllAsync);
         var exportOne = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, () => ExportAsync(all: false));
         var exportAll = Action("Xuất tất cả", Glyphs.List, ButtonVariant.Secondary, () => ExportAsync(all: true));
+        var print = Action("In / PDF (Ctrl+P)", Glyphs.Print, ButtonVariant.Secondary, () => PrintAsync(all: false));
         var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
-        actions.Controls.AddRange([refresh, exportAll, exportOne]);
+        actions.Controls.AddRange([refresh, print, exportAll, exportOne]);
 
         var header = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(24, 16, 24, 0) };
         header.Controls.Add(left);
@@ -258,6 +260,12 @@ internal sealed class ReportsScreen : UserControl
                 return true;
             case Keys.Control | Keys.E:
                 _ = ExportAsync(all: false);
+                return true;
+            case Keys.Control | Keys.P:
+                _ = PrintAsync(all: false);
+                return true;
+            case Keys.Control | Keys.Shift | Keys.P:
+                _ = PrintAsync(all: true);
                 return true;
         }
 
@@ -618,21 +626,25 @@ internal sealed class ReportsScreen : UserControl
 
     // ---- Export ----------------------------------------------------------------------------------------
 
-    private async Task ExportAsync(bool all)
+    private ReportExportRequest BuildRequest(bool all)
     {
         IReadOnlyList<ReportKind> kinds = all
             ? [ReportKind.Revenue, ReportKind.BestSellers, ReportKind.ProfitByCategory, ReportKind.InventoryValue]
             : [(ReportKind)_tabs.SelectedIndex];
 
         var categoryId = _category.Visible ? _category.SelectedValue as int? : null;
-        var request = new ReportExportRequest(
+        return new ReportExportRequest(
             kinds,
             CurrentPeriod,
             _rankBy.SelectedValue is ProductRanking r ? r : ProductRanking.Quantity,
             _top.SelectedValue is int t ? t : 20,
             categoryId,
             categoryId is null ? null : _category.Text);
+    }
 
+    private async Task ExportAsync(bool all)
+    {
+        var request = BuildRequest(all);
         using var scope = _scopeFactory.CreateScope();
         var exporter = scope.ServiceProvider.GetRequiredService<IReportExportService>();
         var result = await LoadingOverlay.RunAsync(this, () => exporter.ExportAsync(request), "Đang tạo file Excel…");
@@ -652,6 +664,41 @@ internal sealed class ReportsScreen : UserControl
         {
             SetStatus($"Đã xuất {Path.GetFileName(path)}", LabelTone.Success);
         }
+    }
+
+    private async Task PrintAsync(bool all)
+    {
+        var request = BuildRequest(all);
+        ReportDocument document;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var exporter = scope.ServiceProvider.GetRequiredService<IReportExportService>();
+            var result = await LoadingOverlay.RunAsync(this, () => exporter.PrepareAsync(request), "Đang chuẩn bị bản in…");
+            if (IsDisposed)
+            {
+                return;
+            }
+
+            if (result.IsFailure)
+            {
+                ModernDialog.Warning(this, result.Error.Message, Caption);
+                return;
+            }
+
+            document = result.Value;
+        }
+
+        using var preview = new ReportPrintPreviewForm(document, async (output, target) =>
+        {
+            // A fresh scope per audit entry keeps the DbContext short-lived while the preview stays open.
+            using var auditScope = _scopeFactory.CreateScope();
+            await auditScope.ServiceProvider.GetRequiredService<IReportExportService>().RecordPrintedAsync(document, output, target);
+            if (!IsDisposed)
+            {
+                SetStatus(output == ReportOutput.Pdf ? $"Đã lưu PDF {target}" : $"Đã in {document.Names}", LabelTone.Success);
+            }
+        });
+        preview.ShowDialog(FindForm());
     }
 
     private sealed record Option<T>(T Value, string Name);

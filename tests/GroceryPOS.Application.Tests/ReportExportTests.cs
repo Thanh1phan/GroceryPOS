@@ -124,6 +124,46 @@ public sealed class ReportExportTests
         Assert.Empty(audit.Entries);
     }
 
+    [Fact]
+    public async Task Prepare_returns_sheets_without_writing_or_auditing()
+    {
+        var (sut, writer, audit, uow) = Create(Permissions.ReportsView);
+
+        var result = await sut.PrepareAsync(new ReportExportRequest([ReportKind.BestSellers, ReportKind.Revenue], November));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Message : null);
+        var document = result.Value;
+        Assert.Equal("BaoCao_20261101-20261102", document.FileStem);
+        Assert.Equal("Bán chạy, Doanh thu", document.Names);
+        Assert.Equal("Từ ngày 01/11/2026 đến ngày 02/11/2026", document.PeriodLine);
+        Assert.Equal("Tạp hóa Cô Ba", document.StoreName);
+        Assert.Equal(new DateTime(2026, 11, 2, 21, 5, 0), document.GeneratedAt); // store time (UTC+7)
+        Assert.Null(writer.Written);
+        Assert.Empty(audit.Entries);
+        Assert.Equal(0, uow.SaveCount);
+
+        var (denied, _, deniedAudit, _) = Create(Permissions.SalesCreate);
+        Assert.Equal(ReportErrors.Denied, (await denied.PrepareAsync(new ReportExportRequest([ReportKind.Revenue], November))).Error);
+        Assert.Equal(ReportExportService.NothingSelected, (await sut.PrepareAsync(new ReportExportRequest([], November))).Error);
+        Assert.Empty(deniedAudit.Entries);
+    }
+
+    [Fact]
+    public async Task Printing_and_pdf_are_audited_with_report_period_and_target()
+    {
+        var (sut, _, audit, uow) = Create(Permissions.ReportsView);
+        var document = (await sut.PrepareAsync(new ReportExportRequest([ReportKind.Revenue], November))).Value;
+
+        await sut.RecordPrintedAsync(document, ReportOutput.Pdf, "BaoCao_DoanhThu.pdf");
+        await sut.RecordPrintedAsync(document, ReportOutput.Printer, "  ");
+
+        Assert.Equal(2, audit.Entries.Count);
+        Assert.All(audit.Entries, e => Assert.Equal(AuditActions.ReportPrinted, e.Action));
+        Assert.Equal("Doanh thu – Từ ngày 01/11/2026 đến ngày 02/11/2026 – PDF (BaoCao_DoanhThu.pdf)", audit.Entries[0].Details);
+        Assert.Equal("Doanh thu – Từ ngày 01/11/2026 đến ngày 02/11/2026 – máy in", audit.Entries[1].Details);
+        Assert.Equal(2, uow.SaveCount);
+    }
+
     private static int IndexOf(ReportSheet sheet, string header)
     {
         for (var i = 0; i < sheet.Columns.Count; i++)

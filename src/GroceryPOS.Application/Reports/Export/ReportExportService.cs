@@ -33,6 +33,33 @@ public interface IReportExportService
     /// workbook, one sheet per report. Audited as <c>report.exported</c>.
     /// </summary>
     Task<Result<ReportFile>> ExportAsync(ReportExportRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs the requested reports and returns their sheets for printing or PDF, without writing a file or auditing –
+    /// call <see cref="RecordPrintedAsync"/> once the document has actually been printed or saved.
+    /// </summary>
+    Task<Result<ReportDocument>> PrepareAsync(ReportExportRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Audits a printed report or a saved PDF as <c>report.printed</c>.</summary>
+    Task RecordPrintedAsync(ReportDocument document, ReportOutput output, string? target = null, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Where a prepared report went.</summary>
+public enum ReportOutput
+{
+    Printer = 0,
+    Pdf = 1,
+}
+
+/// <summary>
+/// Prepared report sheets plus a file name stem ("BaoCao_DoanhThu_20261101-20261130"), the period line and the
+/// store / store-local time they were generated for.
+/// </summary>
+public sealed record ReportDocument(
+    string FileStem, string PeriodLine, IReadOnlyList<ReportSheet> Sheets, string StoreName, DateTime GeneratedAt)
+{
+    /// <summary>"Doanh thu" or "Doanh thu, Bán chạy" – used in titles and the audit trail.</summary>
+    public string Names => string.Join(", ", Sheets.Select(s => s.Name));
 }
 
 public sealed class ReportExportService : IReportExportService
@@ -70,11 +97,29 @@ public sealed class ReportExportService : IReportExportService
 
     public async Task<Result<ReportFile>> ExportAsync(ReportExportRequest request, CancellationToken cancellationToken = default)
     {
+        var prepared = await PrepareAsync(request, cancellationToken);
+        if (prepared.IsFailure)
+        {
+            return Result.Failure<ReportFile>(prepared.Error);
+        }
+
+        var document = prepared.Value;
+        var content = await _writer.WriteAsync(document.Sheets, cancellationToken);
+        var fileName = document.FileStem + _writer.FileExtension;
+
+        _audit.Record(AuditActions.ReportExported, details: $"{document.Names} – {document.PeriodLine}");
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return new ReportFile(fileName, content);
+    }
+
+    public async Task<Result<ReportDocument>> PrepareAsync(ReportExportRequest request, CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(request);
         var kinds = request.Reports.Distinct().ToList();
         if (kinds.Count == 0)
         {
-            return Result.Failure<ReportFile>(NothingSelected);
+            return Result.Failure<ReportDocument>(NothingSelected);
         }
 
         var now = _clock.GetUtcNow().ToOffset(_options.StoreUtcOffset).DateTime;
@@ -87,21 +132,23 @@ public sealed class ReportExportService : IReportExportService
             var sheet = await BuildAsync(kind, request, header, now, cancellationToken);
             if (sheet.IsFailure)
             {
-                return Result.Failure<ReportFile>(sheet.Error);
+                return Result.Failure<ReportDocument>(sheet.Error);
             }
 
             sheets.Add(sheet.Value);
         }
 
-        var content = await _writer.WriteAsync(sheets, cancellationToken);
-        var fileName = FileName(kinds, request.Period, now) + _writer.FileExtension;
+        return new ReportDocument(FileName(kinds, request.Period, now), ReportSheets.PeriodLine(request.Period), sheets, _store.Name, now);
+    }
 
-        _audit.Record(
-            AuditActions.ReportExported,
-            details: $"{string.Join(", ", sheets.Select(s => s.Name))} – {ReportSheets.PeriodLine(request.Period)}");
+    public async Task RecordPrintedAsync(
+        ReportDocument document, ReportOutput output, string? target = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var how = output == ReportOutput.Pdf ? "PDF" : "máy in";
+        var where = string.IsNullOrWhiteSpace(target) ? string.Empty : $" ({target.Trim()})";
+        _audit.Record(AuditActions.ReportPrinted, details: $"{document.Names} – {document.PeriodLine} – {how}{where}");
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return new ReportFile(fileName, content);
     }
 
     /// <summary>"BaoCao_DoanhThu_20261101-20261130", or "BaoCao_20261101-20261130" for several reports.</summary>

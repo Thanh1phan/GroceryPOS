@@ -65,7 +65,7 @@ internal static class ExcelFiles
         {
             if (!owner.IsDisposed)
             {
-                Toaster.Warning(owner, $"Không mở được {Path.GetFileName(path)}: máy chưa có ứng dụng đọc file Excel, hoặc file đã bị di chuyển.", caption);
+                Toaster.Warning(owner, $"Không mở được {Path.GetFileName(path)}: máy chưa có ứng dụng mở loại file này, hoặc file đã bị di chuyển.", caption);
             }
         }
     }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-07
+- **In / PDF (Ctrl+P)** on the **Báo cáo** screen: an A4 print preview of the current tab (Ctrl+Shift+P: all four reports in one document) with A4 ngang/dọc, page navigation (PgUp/PgDn, Home/End, "Trang x/y"), zoom (Ctrl +/−, Ctrl+0 vừa trang), **In** to the default printer, **Chọn máy in…** with a page range, and **Xuất PDF (Ctrl+S)** through Windows' built-in *Microsoft Print to PDF* printer (locked-file check, "Mở file" toast, clear advice when that printer is turned off).
+- Printed pages: title block with store, period and who generated it; repeated column headers; zebra rows; bold totals row; footer "GroceryPOS · cửa hàng · lập lúc …" and "Trang x/y" numbered across the whole document. Drawn by `App.Printing.ReportPrintDocument` from the same `ReportSheet`s as the Excel export, so paper, PDF and Excel always show the same columns.
+- New UI-free `ReportPrintPlan`: shrinks a table to the page width down to 72 %, splits wider reports (e.g. the 19-column revenue report) into column bands that repeat the key columns (date / rank / code / name) with "Phần 2/2: Hoàn trả → Thẻ" captions, fits rows per page around the title block, and puts the totals row after the last row or on its own page; `ReportCellText` formats vi-VN cells (1.250.000 · 12,5 % · 01/11/2026).
+- `IReportExportService.PrepareAsync` returns the sheets (with store name and store-local time) without writing a file; `RecordPrintedAsync` audits printed reports and saved PDFs as the new `report.printed` ("In báo cáo / PDF", with printer or file name).
+- 18 new tests (Domain 149, Application 464, Infrastructure 53, UI.Controls 377 – all passing).
+
 ## 2026-11-06
 - New **Sao lưu dữ liệu** screen in `GroceryPOS.App` (sidebar → Báo cáo & Hệ thống, new permission `system.backup`, Admin only by default): freshness badge ("Sao lưu 3 giờ trước", amber after 2 days, red after 7 or never) with advice, KPI cards, backup list with a detail card that checks the selected file (integrity, version, products / customers / invoices, last invoice), **Sao lưu ngay** (Ctrl+S), **Phục hồi** from the list or any file, **Sao chép ra…** for USB, **Xóa**, **Mở thư mục**, F5.
 - Restore is confirmed in a red dialog, refuses broken files and backups from a newer version, first saves the current data as a "Trước khi phục hồi" copy, applies pending migrations to older backups, records `backup.restored` in the restored audit log and restarts the app.
