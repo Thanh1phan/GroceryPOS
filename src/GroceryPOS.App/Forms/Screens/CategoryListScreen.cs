@@ -2,122 +2,82 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
-using GroceryPOS.UI.Controls.Buttons;
-using GroceryPOS.UI.Controls.Feedback;
-using GroceryPOS.UI.Controls.Grids;
+using GroceryPOS.UI.Controls.Forms;
+using GroceryPOS.UI.Controls.Forms.Core;
+using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Screens;
 
 /// <summary>Category CRUD screen (deactivate/activate only — a category in use can never be hard-deleted).</summary>
-internal sealed class CategoryListScreen : UserControl
+internal sealed class CategoryListScreen : BaseListView<CategoryDto>
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly bool _canManage;
-    private readonly ModernDataGrid _grid;
-    private readonly ModernButton _edit;
-    private readonly ModernButton _toggleActive;
 
     public CategoryListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
     {
         _scopeFactory = scopeFactory;
-        _canManage = currentUser.HasPermission(Permissions.CategoriesManage);
-        Dock = DockStyle.Fill;
+        var canManage = currentUser.HasPermission(Permissions.CategoriesManage);
 
-        _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Chưa có danh mục nào." };
-        _grid.AddTextColumn(nameof(CategoryDto.Name), "Tên danh mục", width: 240);
-        _grid.AddTextColumn(nameof(CategoryDto.Description), "Mô tả");
-        _grid.AddCheckColumn(nameof(CategoryDto.IsActive), "Đang dùng");
-        _grid.RowActivated += (_, e) => Edit((CategoryDto)e.Item);
-        _grid.SelectionChanged += (_, _) => UpdateToolbarState();
+        Grid.EmptyText = "Chưa có danh mục nào.";
+        Grid.AddTextColumn(nameof(CategoryDto.Name), "Tên danh mục", width: 240);
+        Grid.AddTextColumn(nameof(CategoryDto.Description), "Mô tả");
+        Grid.AddCheckColumn(nameof(CategoryDto.IsActive), "Đang dùng");
 
-        var add = new ModernButton { Text = "Thêm danh mục", Variant = ButtonVariant.Primary, Enabled = _canManage };
-        add.Click += (_, _) => Add();
-
-        _edit = new ModernButton { Text = "Sửa", Variant = ButtonVariant.Secondary, Enabled = false };
-        _edit.Click += (_, _) =>
-        {
-            if (_grid.GetSelected<CategoryDto>() is { } category)
+        AddCommand(new ListCommand<CategoryDto>("Thêm danh mục") { Allowed = canManage }, () => Open(null), ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<CategoryDto>("Sửa") { Allowed = canManage }, category => Open(category), iconGlyph: Glyphs.Edit, isDefault: true);
+        AddCommand(
+            new ListCommand<CategoryDto>("Ngừng dùng")
             {
-                Edit(category);
-            }
-        };
-
-        _toggleActive = new ModernButton { Text = "Ngừng dùng", Variant = ButtonVariant.Secondary, Enabled = false };
-        _toggleActive.Click += async (_, _) => await ToggleActiveAsync();
-
-        _grid.ToolbarItems.Controls.AddRange([add, _edit, _toggleActive]);
-        Controls.Add(_grid);
-
-        Load += async (_, _) => await ReloadAsync();
+                Allowed = canManage,
+                TextFor = c => c.IsActive ? "Ngừng dùng" : "Dùng lại",
+            },
+            ToggleActiveAsync);
     }
 
-    private void UpdateToolbarState()
-    {
-        var selected = _grid.GetSelected<CategoryDto>();
-        _edit.Enabled = _canManage && selected is not null;
-        _toggleActive.Enabled = _canManage && selected is not null;
-        _toggleActive.Text = selected is { IsActive: true } ? "Ngừng dùng" : "Dùng lại";
-    }
+    protected override object? KeyOf(CategoryDto item) => item.Id;
 
-    private void Add()
+    protected override async Task<IReadOnlyList<CategoryDto>?> LoadItemsAsync(CancellationToken cancellationToken)
     {
-        using var dialog = new CategoryEditForm(_scopeFactory, category: null);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<ICategoryService>().ListAsync(cancellationToken);
+        if (result.IsFailure)
         {
-            Toaster.Success(this, "Đã thêm danh mục mới.");
-            _ = ReloadAsync();
-        }
-    }
-
-    private void Edit(CategoryDto category)
-    {
-        if (!_canManage)
-        {
-            return;
+            ToastError(result.Error.Message, "Danh mục");
+            return null;
         }
 
+        return result.Value;
+    }
+
+    private void Open(CategoryDto? category)
+    {
         using var dialog = new CategoryEditForm(_scopeFactory, category);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            Toaster.Success(this, $"Đã lưu danh mục {category.Name}.");
-            _ = ReloadAsync();
+            ToastSuccess(category is null ? "Đã thêm danh mục mới." : $"Đã lưu danh mục {category.Name}.");
+            RequestRefresh();
         }
     }
 
-    private async Task ToggleActiveAsync()
+    private async Task ToggleActiveAsync(CategoryDto category)
     {
-        if (_grid.GetSelected<CategoryDto>() is not { } category)
+        using var scope = _scopeFactory.CreateScope();
+        var categories = scope.ServiceProvider.GetRequiredService<ICategoryService>();
+        var result = await (category.IsActive ? categories.DeactivateAsync(category.Id) : categories.ActivateAsync(category.Id));
+        if (!IsAlive)
         {
             return;
         }
 
-        using var scope = _scopeFactory.CreateScope();
-        var categories = scope.ServiceProvider.GetRequiredService<ICategoryService>();
-        await (category.IsActive ? categories.DeactivateAsync(category.Id) : categories.ActivateAsync(category.Id));
-        if (!IsDisposed)
+        if (result.IsFailure)
         {
-            await ReloadAsync();
-        }
-    }
-
-    private async Task ReloadAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var categories = scope.ServiceProvider.GetRequiredService<ICategoryService>();
-        var result = await categories.ListAsync();
-        if (IsDisposed)
-        {
-            // The user navigated away before this load finished; touching a torn-down grid would crash.
+            ShowWarning(result.Error.Message, "Danh mục");
             return;
         }
 
-        if (result.IsSuccess)
-        {
-            _grid.SetItems(result.Value);
-        }
-
-        UpdateToolbarState();
+        ToastSuccess(category.IsActive ? $"Đã ngừng dùng danh mục {category.Name}." : $"Đã dùng lại danh mục {category.Name}.");
+        await RefreshDataAsync();
     }
 }

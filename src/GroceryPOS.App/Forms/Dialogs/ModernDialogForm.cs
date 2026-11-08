@@ -1,15 +1,16 @@
 using GroceryPOS.Application.Common;
 using GroceryPOS.UI.Controls.Buttons;
-using GroceryPOS.UI.Controls.Theming;
+using GroceryPOS.UI.Controls.Forms;
 
 namespace GroceryPOS.App.Forms.Dialogs;
 
 /// <summary>
-/// Shared chrome for the add/edit dialogs: fixed-size window, theme tracking, an inline error label and a
+/// Shared chrome for the hand-laid-out dialogs: fixed-size window, theme tracking (via <see cref="BaseForm"/>), an inline error label and a
 /// save helper that disables the button, awaits, and surfaces <see cref="Error.Message"/> on failure.
-/// Derived forms still lay out their own fields (same hand-written style as <c>LoginForm</c>/<c>ChangePasswordForm</c>).
+/// Derived forms still lay out their own fields; new add/edit dialogs should derive from <see cref="BaseEditDialog"/> instead,
+/// which lays the fields out, adds Hủy/Lưu and guards unsaved changes.
 /// </summary>
-internal abstract class ModernDialogForm : Form
+internal abstract class ModernDialogForm : BaseForm
 {
     private readonly Label _error;
 
@@ -19,6 +20,7 @@ internal abstract class ModernDialogForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
+        KeyPreview = false; // keep the original key routing of these dialogs
 
         _error = new Label
         {
@@ -27,8 +29,6 @@ internal abstract class ModernDialogForm : Form
             Visible = false,
         };
         Controls.Add(_error);
-
-        Load += (_, _) => ThemeManager.Track(this);
     }
 
     protected Label ErrorLabel => _error;

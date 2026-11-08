@@ -18,7 +18,7 @@
       The theme core (tokens, color math, state → color resolution), the input core (number/date parsing,
       date presets, accent-insensitive matching), the grid core (search/sort/paging, pager links), the display
       core (badges, avatars, trends, surface colors), the navigation core (sidebar menu filtering/layout, tab strip
-      overflow) and the feedback core (toast queue/layout, dialog specs, busy tracking) only depend on System.Drawing.Color and the BCL,
+      overflow) the feedback core (toast queue/layout, dialog specs, busy tracking) and the forms core (load sequencing, dirty tracking, field grid, list commands) only depend on System.Drawing.Color and the BCL,
       so they are compiled into this cross-platform test project directly. The WinForms controls themselves
       target net8.0-windows and cannot run on the Linux test agents.
     -->
@@ -28,6 +28,7 @@
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Display\Core\**\*.cs" LinkBase="DisplayCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Navigation\Core\**\*.cs" LinkBase="NavigationCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Feedback\Core\**\*.cs" LinkBase="FeedbackCore" />
+    <Compile Include="..\..\src\GroceryPOS.UI.Controls\Forms\Core\**\*.cs" LinkBase="FormsCore" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />
