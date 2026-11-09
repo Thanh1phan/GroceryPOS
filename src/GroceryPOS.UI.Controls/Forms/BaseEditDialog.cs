@@ -112,7 +112,8 @@ public abstract class BaseEditDialog : BaseForm
 
     /// <summary>
     /// Saves the dialog. Return null on success (the dialog closes with <see cref="DialogResult.OK"/>) or a
-    /// Vietnamese error message to show in the banner (the dialog stays open).
+    /// Vietnamese error message to show in the banner (the dialog stays open). An empty string keeps the dialog
+    /// open without a message (e.g. the user declined a "save anyway?" confirmation).
     /// </summary>
     protected abstract Task<string?> SaveAsync();
 

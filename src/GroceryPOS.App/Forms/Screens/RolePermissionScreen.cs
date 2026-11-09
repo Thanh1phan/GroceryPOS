@@ -329,6 +329,7 @@ internal sealed class RolePermissionScreen : UserControl
         using var dialog = new RoleEditForm(_scopeFactory, role, _matrix.Roles);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
+            Toaster.Success(this, role is null ? "Đã thêm vai trò mới." : $"Đã lưu vai trò {role.Name}.");
             _ = ReloadAsync();
         }
     }

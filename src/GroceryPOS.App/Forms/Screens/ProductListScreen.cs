@@ -4,9 +4,10 @@ using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
-using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Feedback;
-using GroceryPOS.UI.Controls.Grids;
+using GroceryPOS.UI.Controls.Forms;
+using GroceryPOS.UI.Controls.Forms.Core;
+using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -16,131 +17,117 @@ namespace GroceryPOS.App.Forms.Screens;
 /// Every product sold in the store: selling price and stock are both visible, product info is editable, but
 /// stock itself always comes from the warehouse ledger (see <see cref="ProductEditForm"/>).
 /// </summary>
-internal sealed class ProductListScreen : UserControl
+internal sealed class ProductListScreen : BaseListView<ProductListItem>
 {
+    private const string Caption = "Sản phẩm";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ICurrentUser _currentUser;
-    private readonly bool _canManage;
-    private readonly ModernDataGrid _grid;
-    private readonly ModernButton _edit;
-    private readonly ModernButton _toggleActive;
-    private readonly ModernButton _priceHistory;
 
     public ProductListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
     {
         _scopeFactory = scopeFactory;
         _currentUser = currentUser;
-        _canManage = currentUser.HasPermission(Permissions.ProductsManage);
-        Dock = DockStyle.Fill;
+        var canManage = currentUser.HasPermission(Permissions.ProductsManage);
 
-        _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Chưa có sản phẩm nào." };
-        _grid.AddTextColumn(nameof(ProductListItem.Code), "Mã", width: 90);
-        _grid.AddTextColumn(nameof(ProductListItem.Name), "Tên sản phẩm", width: 0);
-        _grid.AddTextColumn(nameof(ProductListItem.CategoryName), "Danh mục", width: 140);
-        _grid.AddTextColumn(nameof(ProductListItem.Unit), "ĐVT", width: 70, searchable: false);
-        _grid.AddMoneyColumn(nameof(ProductListItem.CostPrice), "Giá vốn");
-        _grid.AddMoneyColumn(nameof(ProductListItem.SellPrice), "Giá bán");
-        _grid.AddNumberColumn(nameof(ProductListItem.StockQuantity), "Tồn kho", decimals: 3);
-        _grid.AddNumberColumn(nameof(ProductListItem.MinStockLevel), "Tồn tối thiểu", decimals: 3);
-        _grid.AddCheckColumn(nameof(ProductListItem.IsActive), "Đang bán");
-        _grid.RowActivated += (_, e) => _ = EditAsync((ProductListItem)e.Item);
-        _grid.SelectionChanged += (_, _) => UpdateToolbarState();
+        Grid.EmptyText = "Chưa có sản phẩm nào.";
+        Grid.AddTextColumn(nameof(ProductListItem.Code), "Mã", width: 90);
+        Grid.AddTextColumn(nameof(ProductListItem.Name), "Tên sản phẩm", width: 0);
+        Grid.AddTextColumn(nameof(ProductListItem.CategoryName), "Danh mục", width: 140);
+        Grid.AddTextColumn(nameof(ProductListItem.Unit), "ĐVT", width: 70, searchable: false);
+        Grid.AddMoneyColumn(nameof(ProductListItem.CostPrice), "Giá vốn");
+        Grid.AddMoneyColumn(nameof(ProductListItem.SellPrice), "Giá bán");
+        Grid.AddNumberColumn(nameof(ProductListItem.StockQuantity), "Tồn kho", decimals: 3);
+        Grid.AddNumberColumn(nameof(ProductListItem.MinStockLevel), "Tồn tối thiểu", decimals: 3);
+        Grid.AddCheckColumn(nameof(ProductListItem.IsActive), "Đang bán");
 
-        var add = new ModernButton { Text = "Thêm sản phẩm", Variant = ButtonVariant.Primary, Enabled = _canManage };
-        add.Click += (_, _) => _ = EditAsync(null);
-
-        _edit = new ModernButton { Text = "Sửa", Variant = ButtonVariant.Secondary, Enabled = false };
-        _edit.Click += (_, _) =>
-        {
-            if (_grid.GetSelected<ProductListItem>() is { } product)
+        AddCommand(new ListCommand<ProductListItem>("Thêm sản phẩm") { Allowed = canManage }, () => EditAsync(null), ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<ProductListItem>("Sửa") { Allowed = canManage }, item => EditAsync(item), iconGlyph: Glyphs.Edit, isDefault: true);
+        AddCommand(
+            new ListCommand<ProductListItem>("Ngừng bán")
             {
-                _ = EditAsync(product);
-            }
-        };
-
-        _toggleActive = new ModernButton { Text = "Ngừng bán", Variant = ButtonVariant.Secondary, Enabled = false };
-        _toggleActive.Click += async (_, _) => await ToggleActiveAsync();
-
-        _priceHistory = new ModernButton { Text = "Lịch sử giá", Variant = ButtonVariant.Ghost, Enabled = false };
-        _priceHistory.Click += (_, _) => ShowPriceHistory();
-
-        var import = new ModernButton { Text = "Nhập Excel", Variant = ButtonVariant.Secondary, Enabled = _canManage };
-        import.Click += async (_, _) => await ImportAsync();
-
-        var export = new ModernButton { Text = "Xuất Excel", Variant = ButtonVariant.Secondary, Enabled = _canManage };
-        export.Click += async (_, _) => await ExportAsync();
-
-        _grid.ToolbarItems.Controls.AddRange([add, _edit, _toggleActive, _priceHistory, import, export]);
-        Controls.Add(_grid);
-
-        Load += async (_, _) => await ReloadAsync();
+                Allowed = canManage,
+                TextFor = p => p.IsActive ? "Ngừng bán" : "Bán lại",
+            },
+            ToggleActiveAsync);
+        AddCommand(new ListCommand<ProductListItem>("Lịch sử giá"), ShowPriceHistory, ButtonVariant.Ghost, Glyphs.History);
+        AddCommand(new ListCommand<ProductListItem>("Nhập Excel") { Allowed = canManage }, ImportAsync);
+        AddCommand(new ListCommand<ProductListItem>("Xuất Excel") { Allowed = canManage }, ExportAsync);
     }
 
-    private void UpdateToolbarState()
+    protected override object? KeyOf(ProductListItem item) => item.Id;
+
+    protected override async Task<IReadOnlyList<ProductListItem>?> LoadItemsAsync(CancellationToken cancellationToken)
     {
-        var selected = _grid.GetSelected<ProductListItem>();
-        _edit.Enabled = _canManage && selected is not null;
-        _toggleActive.Enabled = _canManage && selected is not null;
-        _toggleActive.Text = selected is { IsActive: true } ? "Ngừng bán" : "Bán lại";
-        _priceHistory.Enabled = selected is not null;
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IProductService>().ListAsync(cancellationToken);
+        if (result.IsFailure)
+        {
+            ToastError(result.Error.Message, Caption);
+            return null;
+        }
+
+        return result.Value;
     }
 
     private async Task EditAsync(ProductListItem? item)
     {
-        if (item is not null && !_canManage)
-        {
-            return;
-        }
-
         ProductDetail? detail = null;
         if (item is not null)
         {
             using var scope = _scopeFactory.CreateScope();
-            var products = scope.ServiceProvider.GetRequiredService<IProductService>();
-            var result = await products.GetAsync(item.Id);
-            if (IsDisposed || !result.IsSuccess)
+            var result = await scope.ServiceProvider.GetRequiredService<IProductService>().GetAsync(item.Id);
+            if (!IsAlive)
             {
+                return;
+            }
+
+            if (result.IsFailure)
+            {
+                ShowWarning(result.Error.Message, Caption);
+                RequestRefresh(); // the product may have been removed or changed elsewhere
                 return;
             }
 
             detail = result.Value;
         }
-        else if (!_canManage)
-        {
-            return;
-        }
 
         using var dialog = new ProductEditForm(_scopeFactory, _currentUser, detail);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            Toaster.Success(this, detail is null ? "Đã thêm sản phẩm mới." : $"Đã lưu sản phẩm {detail.Code} – {detail.Name}.");
-            await ReloadAsync();
+            ToastSuccess(detail is null ? "Đã thêm sản phẩm mới." : $"Đã lưu sản phẩm {detail.Code} – {detail.Name}.");
+            await RefreshDataAsync();
         }
     }
 
-    private async Task ToggleActiveAsync()
+    private async Task ToggleActiveAsync(ProductListItem product)
     {
-        if (_grid.GetSelected<ProductListItem>() is not { } product)
+        if (product.IsActive
+            && !Confirm($"Ngừng bán \"{product.Name}\"?\nSản phẩm sẽ không quét/tìm được ở màn hình bán hàng; tồn kho và lịch sử được giữ nguyên.",
+                Caption, "Ngừng bán", "Hủy"))
         {
             return;
         }
 
         using var scope = _scopeFactory.CreateScope();
-        var products = scope.ServiceProvider.GetRequiredService<IProductService>();
-        await products.SetActiveAsync(product.Id, !product.IsActive);
-        if (!IsDisposed)
-        {
-            await ReloadAsync();
-        }
-    }
-
-    private void ShowPriceHistory()
-    {
-        if (_grid.GetSelected<ProductListItem>() is not { } product)
+        var result = await scope.ServiceProvider.GetRequiredService<IProductService>().SetActiveAsync(product.Id, !product.IsActive);
+        if (!IsAlive)
         {
             return;
         }
 
+        if (result.IsFailure)
+        {
+            ShowWarning(result.Error.Message, Caption);
+            return;
+        }
+
+        ToastSuccess(product.IsActive ? $"Đã ngừng bán {product.Name}." : $"Đã bán lại {product.Name}.");
+        await RefreshDataAsync();
+    }
+
+    private void ShowPriceHistory(ProductListItem product)
+    {
         using var dialog = new PriceHistoryForm(_scopeFactory, product.Id, product.Name);
         dialog.ShowDialog(this);
     }
@@ -149,15 +136,15 @@ internal sealed class ProductListScreen : UserControl
     {
         using var scope = _scopeFactory.CreateScope();
         var importExport = scope.ServiceProvider.GetRequiredService<IProductImportExportAppService>();
-        var result = await LoadingOverlay.RunAsync(this, () => importExport.ExportAsync(), "Đang xuất danh sách sản phẩm…");
-        if (IsDisposed)
+        var result = await RunBusyAsync(() => importExport.ExportAsync(), "Đang xuất danh sách sản phẩm…");
+        if (!IsAlive)
         {
             return;
         }
 
-        if (!result.IsSuccess)
+        if (result.IsFailure)
         {
-            ModernDialog.Warning(this, result.Error.Message, "Xuất Excel");
+            ShowWarning(result.Error.Message, "Xuất Excel");
             return;
         }
 
@@ -178,7 +165,7 @@ internal sealed class ProductListScreen : UserControl
         Result<ImportSummary> result;
         try
         {
-            result = await LoadingOverlay.RunAsync(this, async () =>
+            result = await RunBusyAsync(async () =>
             {
                 await using var stream = File.OpenRead(ofd.FileName);
                 return await importExport.ImportAsync(stream);
@@ -190,38 +177,19 @@ internal sealed class ProductListScreen : UserControl
             return;
         }
 
-        if (IsDisposed)
+        if (!IsAlive)
         {
             return;
         }
 
-        if (!result.IsSuccess)
+        if (result.IsFailure)
         {
-            ModernDialog.Warning(this, result.Error.Message, "Nhập Excel");
+            ShowWarning(result.Error.Message, "Nhập Excel");
             return;
         }
 
         using var summary = new ImportSummaryForm(result.Value);
         summary.ShowDialog(this);
-        await ReloadAsync();
-    }
-
-    private async Task ReloadAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var products = scope.ServiceProvider.GetRequiredService<IProductService>();
-        var result = await products.ListAsync();
-        if (IsDisposed)
-        {
-            // The user navigated away before this load finished; touching a torn-down grid would crash.
-            return;
-        }
-
-        if (result.IsSuccess)
-        {
-            _grid.SetItems(result.Value);
-        }
-
-        UpdateToolbarState();
+        await RefreshDataAsync();
     }
 }

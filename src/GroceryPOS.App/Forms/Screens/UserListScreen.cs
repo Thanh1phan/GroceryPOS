@@ -3,9 +3,9 @@ using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Users;
 using GroceryPOS.App.Forms.Dialogs;
 using GroceryPOS.Domain.Identity;
-using GroceryPOS.UI.Controls.Buttons;
-using GroceryPOS.UI.Controls.Feedback;
-using GroceryPOS.UI.Controls.Grids;
+using GroceryPOS.UI.Controls.Forms;
+using GroceryPOS.UI.Controls.Forms.Core;
+using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,164 +15,116 @@ namespace GroceryPOS.App.Forms.Screens;
 /// User accounts (người dùng): add, edit name/role, reset password, unlock, stop/resume. Accounts are never deleted.
 /// Buttons follow <c>users.manage</c>; the service also refuses accounts whose role is above the signed-in user's.
 /// </summary>
-internal sealed class UserListScreen : UserControl
+internal sealed class UserListScreen : BaseListView<UserListScreen.UserRow>
 {
     private const string Caption = "Người dùng";
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly bool _canManage;
-    private readonly ModernDataGrid _grid;
-    private readonly ModernButton _edit;
-    private readonly ModernButton _resetPassword;
-    private readonly ModernButton _unlock;
-    private readonly ModernButton _toggleActive;
 
     public UserListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
     {
         _scopeFactory = scopeFactory;
-        _canManage = currentUser.HasPermission(Permissions.UsersManage);
-        Dock = DockStyle.Fill;
+        var canManage = currentUser.HasPermission(Permissions.UsersManage);
 
-        _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Chưa có người dùng nào." };
-        _grid.AddTextColumn(nameof(UserRow.Username), "Tên đăng nhập", width: 150);
-        _grid.AddTextColumn(nameof(UserRow.FullName), "Họ tên");
-        _grid.AddTextColumn(nameof(UserRow.RoleName), "Vai trò", width: 140);
-        _grid.AddTextColumn(nameof(UserRow.Status), "Trạng thái", width: 150);
-        _grid.AddDateColumn(nameof(UserRow.LastLogin), "Đăng nhập gần nhất", width: 160, withTime: true, searchable: false);
-        _grid.RowActivated += (_, e) => Open(((UserRow)e.Item).User);
-        _grid.SelectionChanged += (_, _) => UpdateToolbarState();
+        Grid.EmptyText = "Chưa có người dùng nào.";
+        Grid.AddTextColumn(nameof(UserRow.Username), "Tên đăng nhập", width: 150);
+        Grid.AddTextColumn(nameof(UserRow.FullName), "Họ tên");
+        Grid.AddTextColumn(nameof(UserRow.RoleName), "Vai trò", width: 140);
+        Grid.AddTextColumn(nameof(UserRow.Status), "Trạng thái", width: 150);
+        Grid.AddDateColumn(nameof(UserRow.LastLogin), "Đăng nhập gần nhất", width: 160, withTime: true, searchable: false);
 
-        var add = new ModernButton { Text = "Thêm người dùng", Variant = ButtonVariant.Primary, Width = 150, Enabled = _canManage };
-        add.Click += (_, _) => Open(null);
-
-        _edit = new ModernButton { Text = "Sửa", Variant = ButtonVariant.Secondary, Enabled = false };
-        _edit.Click += (_, _) =>
-        {
-            if (Selected is { } user)
+        AddCommand(new ListCommand<UserRow>("Thêm người dùng") { Allowed = canManage }, () => Open(null), ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<UserRow>("Sửa") { Allowed = canManage }, row => Open(row.User), iconGlyph: Glyphs.Edit, isDefault: true);
+        AddCommand(
+            new ListCommand<UserRow>("Đặt lại mật khẩu") { Allowed = canManage, EnabledWhen = r => !r.User.IsCurrentUser },
+            row => ResetPassword(row.User),
+            iconGlyph: Glyphs.Lock);
+        AddCommand(
+            new ListCommand<UserRow>("Mở khóa") { Allowed = canManage, EnabledWhen = r => r.User.IsLockedOut },
+            row => RunAsync(s => s.UnlockAsync(row.User.Id), $"Đã mở khóa tài khoản {row.User.Username}."));
+        AddCommand(
+            new ListCommand<UserRow>("Ngừng hoạt động")
             {
-                Open(user);
-            }
-        };
-
-        _resetPassword = new ModernButton { Text = "Đặt lại mật khẩu", Variant = ButtonVariant.Secondary, Width = 150, Enabled = false };
-        _resetPassword.Click += (_, _) => ResetPassword();
-
-        _unlock = new ModernButton { Text = "Mở khóa", Variant = ButtonVariant.Secondary, Enabled = false };
-        _unlock.Click += async (_, _) => await RunAsync(s => s.UnlockAsync(Selected!.Id));
-
-        _toggleActive = new ModernButton { Text = "Ngừng hoạt động", Variant = ButtonVariant.Secondary, Width = 150, Enabled = false };
-        _toggleActive.Click += async (_, _) => await ToggleActiveAsync();
-
-        _grid.ToolbarItems.Controls.AddRange([add, _edit, _resetPassword, _unlock, _toggleActive]);
-        Controls.Add(_grid);
-
-        Load += async (_, _) => await ReloadAsync();
+                Allowed = canManage,
+                EnabledWhen = r => !r.User.IsCurrentUser,
+                TextFor = r => r.User.IsActive ? "Ngừng hoạt động" : "Kích hoạt lại",
+            },
+            row => ToggleActiveAsync(row.User));
     }
 
-    private UserDto? Selected => _grid.GetSelected<UserRow>()?.User;
+    protected override object? KeyOf(UserRow item) => item.User.Id;
 
-    private void UpdateToolbarState()
+    protected override async Task<IReadOnlyList<UserRow>?> LoadItemsAsync(CancellationToken cancellationToken)
     {
-        var selected = Selected;
-        var canAct = _canManage && selected is not null;
-        _edit.Enabled = canAct;
-        _resetPassword.Enabled = canAct && !selected!.IsCurrentUser;
-        _unlock.Enabled = canAct && selected!.IsLockedOut;
-        _toggleActive.Enabled = canAct && !selected!.IsCurrentUser;
-        _toggleActive.Text = selected is { IsActive: false } ? "Kích hoạt lại" : "Ngừng hoạt động";
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IUserManagementService>().ListAsync(cancellationToken);
+        if (result.IsFailure)
+        {
+            ToastError(result.Error.Message, Caption);
+            return null;
+        }
+
+        return result.Value.Select(u => new UserRow(u)).ToList();
     }
 
     private void Open(UserDto? user)
     {
-        if (!_canManage)
-        {
-            return;
-        }
-
         using var dialog = new UserEditForm(_scopeFactory, user);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            _ = ReloadAsync();
+            if (user is not null)
+            {
+                ToastSuccess($"Đã lưu tài khoản {user.Username}.");
+            }
+
+            RequestRefresh();
         }
     }
 
-    private void ResetPassword()
+    private void ResetPassword(UserDto user)
     {
-        if (Selected is not { } user)
-        {
-            return;
-        }
-
         using var dialog = new ResetPasswordForm(_scopeFactory, user);
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            _ = ReloadAsync();
+            RequestRefresh();
         }
     }
 
-    private async Task ToggleActiveAsync()
+    private async Task ToggleActiveAsync(UserDto user)
     {
-        if (Selected is not { } user)
-        {
-            return;
-        }
-
         if (user.IsActive
-            && !ModernDialog.Confirm(this, $"Ngừng hoạt động tài khoản \"{user.Username}\" ({user.FullName})?\nNgười này sẽ không đăng nhập được nữa.",
+            && !Confirm($"Ngừng hoạt động tài khoản \"{user.Username}\" ({user.FullName})?\nNgười này sẽ không đăng nhập được nữa.",
                 Caption, "Ngừng hoạt động", "Hủy", danger: true))
         {
             return;
         }
 
-        await RunAsync(s => user.IsActive ? s.DeactivateAsync(user.Id) : s.ActivateAsync(user.Id));
+        await RunAsync(
+            s => user.IsActive ? s.DeactivateAsync(user.Id) : s.ActivateAsync(user.Id),
+            user.IsActive ? $"Đã ngừng hoạt động tài khoản {user.Username}." : $"Đã kích hoạt lại tài khoản {user.Username}.");
     }
 
-    private async Task RunAsync(Func<IUserManagementService, Task<Result>> action)
+    private async Task RunAsync(Func<IUserManagementService, Task<Result>> action, string successMessage)
     {
-        if (Selected is null)
-        {
-            return;
-        }
-
         using var scope = _scopeFactory.CreateScope();
         var result = await action(scope.ServiceProvider.GetRequiredService<IUserManagementService>());
-        if (IsDisposed)
+        if (!IsAlive)
         {
             return;
         }
 
         if (result.IsFailure)
         {
-            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            ShowWarning(result.Error.Message, Caption);
             return;
         }
 
-        await ReloadAsync();
-    }
-
-    private async Task ReloadAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IUserManagementService>().ListAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsSuccess)
-        {
-            _grid.SetItems(result.Value.Select(u => new UserRow(u)).ToList());
-        }
-        else
-        {
-            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        }
-
-        UpdateToolbarState();
+        ToastSuccess(successMessage);
+        await RefreshDataAsync();
     }
 
     /// <summary>Grid row: the DTO plus the last sign-in in local (store) time.</summary>
-    private sealed record UserRow(UserDto User)
+    internal sealed record UserRow(UserDto User)
     {
         public string Username => User.Username;
         public string FullName => User.IsCurrentUser ? $"{User.FullName} (bạn)" : User.FullName;
