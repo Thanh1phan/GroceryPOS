@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-10
+- The last hand-laid-out dialogs now use `BaseEditDialog`: **Mở ca**, **Thu / chi tiền mặt**, **Kết ca** (count sheet hosted as one full-width body), **Điều chỉnh tồn kho** and **Trả nợ nhà cung cấp** get the shared layout, red error banner, Ctrl+S, Esc and the "bỏ thay đổi?" prompt (e.g. closing Kết ca after counting now asks first). `ModernDialogForm` and its hard-coded red error label are gone.
+- New **`ModernSegmentedControl`** (UI.Controls): pill-shaped choice replacing radio buttons – one tab stop, ←/→/Home/End and first-letter keys, primary or red accent, themed and accessible; layout rules in the tested `SegmentLayout`. Used for nộp/chi, tiền mặt/chuyển khoản, giảm/tăng tồn and đếm theo mệnh giá/nhập tổng.
+- New **`FormNote`** + `BaseEditDialog.AddNote`: tone-colored wrapped text whose height follows its text, with the dialog re-laying out as previews grow; `BaseEditDialog.CanSave` keeps the save button disabled after a failed save while a draft still has a blocker.
+- Small improvements: Mở ca warns in amber when the float differs from what the previous shift left ("chênh +50.000 ₫"); Thu / chi shows the drawer before → after and turns red when a pay-out exceeds it; "Trả một nửa" shows the amount; supplier payment confirmation states the remaining debt; stock adjustment shows blockers in red inside the preview.
+- Application: UI-free `CashMovementDraft` and `SupplierPaymentDraft` (31 new tests – Domain 149, Application 486, Infrastructure 53, UI.Controls 427 – all passing).
+
 ## 2026-11-09
 - **Sản phẩm**, **Khách hàng** and **Người dùng** screens now derive from `BaseListView<T>`: toolbar buttons follow permission and selection through `ListCommand` rules (e.g. "Đặt lại mật khẩu" / "Ngừng hoạt động" disabled on your own account, "Mở khóa" only for locked accounts), the selected row is kept after reloads, a slow reload can no longer overwrite a newer one, and F5 reloads.
 - Product, customer, user, reset-password and role dialogs now use `BaseEditDialog`: two-column field layout, error banner, Hủy/Lưu, Ctrl+S and the "bỏ thay đổi?" prompt (role/category lists filled after opening do not count as edits). The product dialog shows the barcode icon, stock-alert hint and a **live gross margin** under Giá bán (amber when under 5 %, red at or below cost) and asks for confirmation before saving a selling price at or below cost.

@@ -1,10 +1,8 @@
-using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Domain.Sales;
 using GroceryPOS.UI.Controls.Buttons;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,151 +12,111 @@ namespace GroceryPOS.App.Forms.Purchasing;
 /// <summary>
 /// Phiếu chi trả nợ nhà cung cấp: current debt, amount (pre-filled with the whole debt; "Trả hết" / "Trả một nửa"),
 /// cash or bank transfer with a transaction reference, note, and a live "công nợ còn lại" preview.
+/// State and rules live in the tested <see cref="SupplierPaymentDraft"/>.
 /// </summary>
-internal sealed class SupplierPaymentDialog : ModernDialogForm
+internal sealed class SupplierPaymentDialog : BaseEditDialog
 {
+    private static readonly PaymentMethod[] Methods = [PaymentMethod.Cash, PaymentMethod.BankTransfer];
+
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly SupplierPayableDto _supplier;
+    private readonly SupplierPaymentDraft _draft;
     private readonly ModernCurrencyBox _amount;
-    private readonly RadioButton _cash;
-    private readonly RadioButton _transfer;
+    private readonly ModernSegmentedControl _method;
     private readonly ModernTextBox _reference;
     private readonly ModernTextBox _note;
-    private readonly Label _after;
-    private readonly ModernButton _save;
+    private readonly FormNote _after;
 
     public SupplierPaymentDialog(IServiceScopeFactory scopeFactory, SupplierPayableDto supplier)
+        : base($"Trả nợ nhà cung cấp – {supplier.Name}", contentWidth: 412)
     {
         _scopeFactory = scopeFactory;
-        _supplier = supplier;
-        Text = $"Trả nợ nhà cung cấp – {supplier.Name}";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(460, 520);
+        _draft = new SupplierPaymentDraft(supplier);
+        SaveText = "Lập phiếu chi";
 
-        const int left = 24;
-        const int width = 412;
+        AddNote($"{supplier.Code} – {supplier.Name}", role: FontRole.Subtitle, style: FontStyle.Bold);
+        AddNote($"Công nợ hiện tại: {Vnd.Format(supplier.DebtBalance)}", NoteTone.Muted);
+        _amount = AddField("Số tiền trả", new ModernCurrencyBox { Minimum = 0, Maximum = Math.Max(0, supplier.DebtBalance), Value = _draft.Amount });
+        var chips = AddField(null, new FlowLayoutPanel { Height = 34, WrapContents = false }, fullWidth: true, track: false);
+        chips.Controls.AddRange([
+            Chip("Trả hết", () => _draft.PayAll()),
+            Chip($"Trả một nửa ({Vnd.Format(_draft.HalfAmount)})", () => _draft.PayHalf()),
+        ]);
+        _method = AddField("Hình thức", new ModernSegmentedControl());
+        _method.SetItems(["Tiền mặt", "Chuyển khoản"]);
+        _reference = AddField("Chứng từ", new ModernTextBox { PlaceholderText = _draft.ReferencePlaceholder, MaxLength = 100 });
+        _note = AddField("Ghi chú", new ModernTextBox { PlaceholderText = "Ví dụ: thanh toán HĐ tháng 10", MaxLength = 500 });
+        _after = AddNote(_draft.AfterText, role: FontRole.Subtitle, style: FontStyle.Bold);
 
-        var title = new Label
+        _amount.ValueChanged += (_, _) =>
         {
-            Text = $"{supplier.Code} – {supplier.Name}",
-            Font = new Font(Font.FontFamily, 12, FontStyle.Bold),
-            AutoEllipsis = true,
-            Location = new Point(left, 16),
-            Size = new Size(width, 28),
-        };
-        var debt = new Label
-        {
-            Text = $"Công nợ hiện tại: {Vnd.Format(supplier.DebtBalance)}",
-            AutoSize = true,
-            Location = new Point(left, 48),
-        };
-
-        var amountCaption = new Label { Text = "Số tiền trả", AutoSize = true, Location = new Point(left, 80) };
-        _amount = new ModernCurrencyBox { Location = new Point(left, 102), Width = width, Minimum = 0, Maximum = supplier.DebtBalance, Value = supplier.DebtBalance };
-        _amount.ValueChanged += (_, _) => RenderAfter();
-        var all = Chip("Trả hết", () => _amount.Value = supplier.DebtBalance);
-        var half = Chip("Trả một nửa", () => _amount.Value = Math.Round(supplier.DebtBalance / 2 / 1_000, MidpointRounding.AwayFromZero) * 1_000);
-        var chips = new FlowLayoutPanel { Location = new Point(left, 160), Size = new Size(width, 36), WrapContents = false };
-        chips.Controls.AddRange([all, half]);
-
-        _cash = new RadioButton { Text = "Tiền mặt", AutoSize = true, Location = new Point(left, 206), Checked = true };
-        _transfer = new RadioButton { Text = "Chuyển khoản", AutoSize = true, Location = new Point(left + 140, 206) };
-
-        var referenceCaption = new Label { Text = "Chứng từ", AutoSize = true, Location = new Point(left, 240) };
-        _reference = new ModernTextBox { Location = new Point(left, 262), Width = width, PlaceholderText = "Số chứng từ (không bắt buộc)", MaxLength = 100 };
-        _transfer.CheckedChanged += (_, _) => _reference.PlaceholderText = _transfer.Checked ? "Mã giao dịch / số UNC" : "Số chứng từ (không bắt buộc)";
-        var noteCaption = new Label { Text = "Ghi chú", AutoSize = true, Location = new Point(left, 320) };
-        _note = new ModernTextBox { Location = new Point(left, 342), Width = width, PlaceholderText = "Ví dụ: thanh toán HĐ tháng 10", MaxLength = 500 };
-
-        _after = new Label { Location = new Point(left, 400), Size = new Size(width, 24), Font = new Font(Font.FontFamily, 10, FontStyle.Bold) };
-
-        ErrorLabel.Location = new Point(left, 428);
-        ErrorLabel.Size = new Size(width - 230, 80);
-
-        _save = new ModernButton { Text = "Lập phiếu chi", Variant = ButtonVariant.Primary, Location = new Point(left + width - 230, 464), Size = new Size(130, 40) };
-        _save.Click += async (_, _) => await SaveAsync();
-        var cancel = new ModernButton
-        {
-            Text = "Hủy",
-            Variant = ButtonVariant.Ghost,
-            Location = new Point(left + width - 90, 464),
-            Size = new Size(90, 40),
-            DialogResult = DialogResult.Cancel,
-        };
-
-        AcceptButton = _save;
-        CancelButton = cancel;
-        Controls.AddRange([title, debt, amountCaption, _amount, chips, _cash, _transfer, referenceCaption, _reference, noteCaption, _note, _after, _save, cancel]);
-        Shown += (_, _) =>
-        {
+            _draft.SetAmount(_amount.ValueOrZero);
+            _amount.ClearValidation();
             RenderAfter();
-            _amount.Focus();
-            _amount.SelectAll();
         };
+        _method.SelectedIndexChanged += (_, _) =>
+        {
+            _draft.SetMethod(Methods[Math.Max(0, _method.SelectedIndex)]);
+            _reference.PlaceholderText = _draft.ReferencePlaceholder;
+        };
+        RenderAfter();
     }
 
     public SupplierPaymentDto? Payment { get; private set; }
 
-    private ModernButton Chip(string text, Action onClick)
+    protected override void OnShown(EventArgs e)
     {
-        var button = new ModernButton { Text = text, Variant = ButtonVariant.Secondary, AutoSize = true, Height = 30, Margin = new Padding(0, 0, 6, 0) };
+        base.OnShown(e);
+        _amount.SelectAll();
+    }
+
+    private ModernButton Chip(string text, Action apply)
+    {
+        var button = new ModernButton { Text = text, Variant = ButtonVariant.Secondary, AutoSize = true, Height = 30, Margin = new Padding(0, 0, 6, 0), TabStop = false };
         button.Click += (_, _) =>
         {
-            onClick();
+            apply();
+            _amount.Value = _draft.Amount;
             _amount.Focus();
+            _amount.SelectAll();
         };
         return button;
     }
 
-    private void RenderAfter()
-    {
-        var after = _supplier.DebtBalance - _amount.ValueOrZero;
-        var colors = ThemeManager.Current.Colors;
-        _after.Text = after <= 0 ? "Sau khi trả: hết nợ nhà cung cấp." : $"Công nợ còn lại: {Vnd.Format(after)}";
-        _after.ForeColor = after < 0 ? colors.Danger : after == 0 ? colors.Success : colors.TextPrimary;
-    }
+    private void RenderAfter() =>
+        _after.Set(_draft.AfterText, _draft.DebtAfter < 0 ? NoteTone.Danger : _draft.DebtAfter == 0 ? NoteTone.Success : NoteTone.Normal);
 
-    private async Task SaveAsync()
+    protected override async Task<string?> SaveAsync()
     {
         _amount.Commit();
-        _amount.ClearValidation();
-        var amount = _amount.ValueOrZero;
-        if (amount <= 0)
+        _draft.SetAmount(_amount.ValueOrZero);
+        _draft.SetReference(_reference.Text);
+        _draft.SetNote(_note.Text);
+        if (_draft.Blocker is { } blocker)
         {
-            _amount.SetError("Số tiền phải lớn hơn 0.");
+            _amount.SetError(blocker);
             _amount.Focus();
-            return;
+            return string.Empty;
         }
 
-        if (amount > _supplier.DebtBalance)
+        if (!Confirm(_draft.ConfirmText, "Trả nợ nhà cung cấp", "Lập phiếu chi", "Xem lại"))
         {
-            _amount.SetError($"Không được vượt quá công nợ {Vnd.Format(_supplier.DebtBalance)}.");
-            _amount.Focus();
-            return;
+            return string.Empty;
         }
 
-        var method = _transfer.Checked ? PaymentMethod.BankTransfer : PaymentMethod.Cash;
-        var confirm = $"Lập phiếu chi {Vnd.Format(amount)} ({(method == PaymentMethod.Cash ? "tiền mặt" : "chuyển khoản")}) trả nợ {_supplier.Name}?";
-        if (ModernDialog.Show(this, confirm, "Trả nợ nhà cung cấp", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        var request = _draft.BuildRequest();
+        if (request.IsFailure)
         {
-            return;
+            return request.Error.Message;
         }
 
-        await RunSaveAsync(_save, async () =>
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<ISupplierPaymentService>().PayAsync(request.Value);
+        if (result.IsFailure)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<ISupplierPaymentService>().PayAsync(new SupplierPaymentRequest(
-                _supplier.SupplierId,
-                amount,
-                method,
-                string.IsNullOrWhiteSpace(_reference.Text) ? null : _reference.Text.Trim(),
-                string.IsNullOrWhiteSpace(_note.Text) ? null : _note.Text.Trim()));
-            if (result.IsSuccess)
-            {
-                Payment = result.Value;
-            }
+            return result.Error.Message;
+        }
 
-            return (Result)result;
-        });
+        Payment = result.Value;
+        return null;
     }
 }

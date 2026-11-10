@@ -38,7 +38,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Toast notifications (`Toaster`: queue with merge/×n, hover pause, action link, progress line), modal dialog (`ModernDialog`: themed `MessageBox` replacement, danger confirmations, details, dimmed owner via `ModalScrim`), loading overlay (`LoadingOverlay`: delayed/minimum-time spinner over a dimmed snapshot, input blocked) – all `MessageBox.Show` calls in the app migrated
 - [x] BaseForm / BaseUserControl / BaseListView / BaseEditDialog (`UI.Controls.Forms`; tested `Forms/Core`: `LoadSequencer`, `DirtyTracker`, `FieldGrid`, `ListCommand<T>`; categories and suppliers migrated)
 - [x] Migrate the remaining list screens and edit dialogs (products, customers, users, roles) to the base classes (Sản phẩm, Khách hàng, Người dùng on `BaseListView<T>`; product, customer, user, reset-password and role dialogs on `BaseEditDialog`; live gross margin under the selling price via the tested `PriceMargin`)
-- [ ] Migrate the remaining `ModernDialogForm` dialogs (shift open/pay-in/out/close, stock adjustment, supplier payment) to `BaseEditDialog`
+- [x] Migrate the remaining `ModernDialogForm` dialogs (shift open/pay-in/out/close, stock adjustment, supplier payment) to `BaseEditDialog` (`ModernDialogForm` removed; new `ModernSegmentedControl`, `FormNote`/`AddNote`, tested `CashMovementDraft` and `SupplierPaymentDraft`)
 
 ## M4 – Master data
 - [x] Categories CRUD

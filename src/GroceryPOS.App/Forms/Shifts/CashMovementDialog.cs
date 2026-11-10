@@ -1,9 +1,7 @@
-using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Application.Common;
-using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Domain.Shifts;
 using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,84 +9,77 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GroceryPOS.App.Forms.Shifts;
 
 /// <summary>
-/// Thu / chi tiền mặt ngoài bán hàng on the cashier's open shift: amount, reason (with one-click common reasons)
-/// and the cash currently in the drawer, so a pay-out larger than the drawer is caught before saving.
+/// Thu / chi tiền mặt ngoài bán hàng on the cashier's open shift: direction, amount, reason (with one-click common
+/// reasons) and a live "tiền trong két: trước → sau" line, so a pay-out larger than the drawer is caught before saving.
+/// State and rules live in the tested <see cref="CashMovementDraft"/>.
 /// </summary>
-internal sealed class CashMovementDialog : ModernDialogForm
+internal sealed class CashMovementDialog : BaseEditDialog
 {
-    private static readonly string[] PayInReasons = ["Đổi tiền lẻ", "Bổ sung tiền thối", "Chủ cửa hàng nộp thêm"];
-    private static readonly string[] PayOutReasons = ["Mua đá / nước", "Trả tiền giao hàng", "Rút tiền nộp chủ", "Chi vặt"];
+    private static readonly CashMovementType[] Types = [CashMovementType.PayIn, CashMovementType.PayOut];
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly decimal _cashInDrawer;
-    private readonly RadioButton _payIn;
-    private readonly RadioButton _payOut;
+    private readonly CashMovementDraft _draft;
+    private readonly ModernSegmentedControl _type;
+    private readonly FormNote _drawer;
     private readonly ModernCurrencyBox _amount;
     private readonly ModernTextBox _reason;
     private readonly FlowLayoutPanel _quickReasons;
-    private readonly ModernButton _save;
 
     public CashMovementDialog(IServiceScopeFactory scopeFactory, ShiftSummaryDto shift, CashMovementType type)
+        : base($"Thu / chi tiền mặt – ca {shift.Code}", contentWidth: 392)
     {
         _scopeFactory = scopeFactory;
-        _cashInDrawer = shift.ExpectedCash;
-        Text = $"Thu / chi tiền mặt – ca {shift.Code}";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(440, 400);
+        _draft = new CashMovementDraft(shift.ExpectedCash, type);
 
-        const int left = 24;
-        const int width = 392;
+        _type = AddField("Loại phiếu", new ModernSegmentedControl());
+        _type.SetItems(["Nộp tiền vào két", "Chi tiền từ két"], Array.IndexOf(Types, type));
+        _drawer = AddNote(_draft.Preview, NoteTone.Muted);
+        _amount = AddField("Số tiền", new ModernCurrencyBox { Minimum = 0 });
+        _reason = AddField("Lý do", new ModernTextBox { PlaceholderText = "Bắt buộc – chọn nhanh bên dưới hoặc tự nhập", MaxLength = 200 });
+        _quickReasons = AddField(null, new FlowLayoutPanel { Height = 72, WrapContents = true }, fullWidth: true, track: false);
 
-        _payIn = new RadioButton { Text = "Nộp tiền vào két", AutoSize = true, Location = new Point(left, 16), Checked = type == CashMovementType.PayIn };
-        _payOut = new RadioButton { Text = "Chi tiền từ két", AutoSize = true, Location = new Point(left + 180, 16), Checked = type == CashMovementType.PayOut };
-
-        var drawer = new Label
+        _type.SelectedIndexChanged += (_, _) =>
         {
-            Text = $"Tiền mặt trong két hiện tại: {Vnd.Format(_cashInDrawer)}",
-            AutoSize = true,
-            Location = new Point(left, 48),
+            _draft.SetType(Types[Math.Max(0, _type.SelectedIndex)]);
+            _amount.ClearValidation();
+            RenderReasons();
+            Render();
+        };
+        _amount.ValueChanged += (_, _) =>
+        {
+            _draft.SetAmount(_amount.ValueOrZero);
+            _amount.ClearValidation();
+            Render();
+        };
+        _reason.InnerTextBox.TextChanged += (_, _) =>
+        {
+            _draft.SetReason(_reason.Text);
+            _reason.ClearValidation();
         };
 
-        var amountCaption = new Label { Text = "Số tiền", AutoSize = true, Location = new Point(left, 80) };
-        _amount = new ModernCurrencyBox { Location = new Point(left, 102), Width = width, Minimum = 0 };
-
-        var reasonCaption = new Label { Text = "Lý do", AutoSize = true, Location = new Point(left, 176) };
-        _reason = new ModernTextBox { Location = new Point(left, 198), Width = width, PlaceholderText = "Bắt buộc", MaxLength = 200 };
-        _quickReasons = new FlowLayoutPanel { Location = new Point(left, 252), Size = new Size(width, 72), WrapContents = true };
-
-        ErrorLabel.Location = new Point(left, 326);
-        ErrorLabel.Size = new Size(width - 180, 60);
-
-        _save = new ModernButton { Text = "Lưu", Variant = ButtonVariant.Primary, Location = new Point(left + width - 220, 344), Size = new Size(110, 40) };
-        _save.Click += async (_, _) => await SaveAsync();
-        var cancel = new ModernButton
-        {
-            Text = "Hủy",
-            Variant = ButtonVariant.Ghost,
-            Location = new Point(left + width - 100, 344),
-            Size = new Size(100, 40),
-            DialogResult = DialogResult.Cancel,
-        };
-
-        _payIn.CheckedChanged += (_, _) => RenderReasons();
         RenderReasons();
-
-        AcceptButton = _save;
-        CancelButton = cancel;
-        Controls.AddRange([_payIn, _payOut, drawer, amountCaption, _amount, reasonCaption, _reason, _quickReasons, _save, cancel]);
-        Shown += (_, _) => _amount.Focus();
+        Render();
     }
 
     public ShiftSummaryDto? Updated { get; private set; }
 
-    private CashMovementType Type => _payOut.Checked ? CashMovementType.PayOut : CashMovementType.PayIn;
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        _amount.Select(); // the direction was chosen by the button that opened the dialog
+    }
 
     private void RenderReasons()
     {
-        _quickReasons.Controls.Clear();
-        foreach (var reason in Type == CashMovementType.PayIn ? PayInReasons : PayOutReasons)
+        _quickReasons.SuspendLayout();
+        foreach (Control old in _quickReasons.Controls.Cast<Control>().ToList())
         {
-            var button = new ModernButton { Text = reason, Variant = ButtonVariant.Secondary, AutoSize = true, Height = 30, Margin = new Padding(0, 0, 6, 6) };
+            old.Dispose();
+        }
+
+        foreach (var reason in _draft.QuickReasons)
+        {
+            var button = new ModernButton { Text = reason, Variant = ButtonVariant.Secondary, AutoSize = true, Height = 30, Margin = new Padding(0, 0, 6, 6), TabStop = false };
             button.Click += (_, _) =>
             {
                 _reason.Text = reason;
@@ -97,47 +88,51 @@ internal sealed class CashMovementDialog : ModernDialogForm
             _quickReasons.Controls.Add(button);
         }
 
-        _save.Text = Type == CashMovementType.PayIn ? "Nộp vào két" : "Chi tiền";
-        _save.Variant = Type == CashMovementType.PayIn ? ButtonVariant.Primary : ButtonVariant.Danger;
+        _quickReasons.ResumeLayout(true);
     }
 
-    private async Task SaveAsync()
+    private void Render()
+    {
+        var overdrawn = _draft.IsPayOut && _draft.DrawerAfter < 0;
+        _drawer.Set(_draft.Preview, overdrawn ? NoteTone.Danger : _draft.Amount > 0 ? NoteTone.Normal : NoteTone.Muted);
+        _type.Accent = _draft.IsPayOut ? SegmentAccent.Danger : SegmentAccent.Primary;
+        SaveText = _draft.SaveText;
+        SaveButton.Variant = _draft.IsPayOut ? ButtonVariant.Danger : ButtonVariant.Primary;
+    }
+
+    protected override async Task<string?> SaveAsync()
     {
         _amount.Commit();
-        _amount.ClearValidation();
-        _reason.ClearValidation();
-        if (_amount.ValueOrZero <= 0)
+        _draft.SetAmount(_amount.ValueOrZero);
+        _draft.SetReason(_reason.Text);
+        if (_draft.AmountError is { } amountError)
         {
-            _amount.SetError("Số tiền phải lớn hơn 0.");
+            _amount.SetError(amountError);
             _amount.Focus();
-            return;
+            return string.Empty;
         }
 
-        if (Type == CashMovementType.PayOut && _amount.ValueOrZero > _cashInDrawer)
+        if (_draft.ReasonError is { } reasonError)
         {
-            _amount.SetError($"Trong két chỉ còn {Vnd.Format(Math.Max(0, _cashInDrawer))}.");
-            _amount.Focus();
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_reason.Text))
-        {
-            _reason.SetError("Vui lòng nhập lý do.");
+            _reason.SetError(reasonError);
             _reason.Focus();
-            return;
+            return string.Empty;
         }
 
-        await RunSaveAsync(_save, async () =>
+        var request = _draft.BuildRequest();
+        if (request.IsFailure)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<IShiftService>()
-                .RecordCashMovementAsync(new CashMovementRequest(Type, _amount.ValueOrZero, _reason.Text.Trim()));
-            if (result.IsSuccess)
-            {
-                Updated = result.Value;
-            }
+            return request.Error.Message;
+        }
 
-            return (Result)result;
-        });
+        using var scope = _scopeFactory.CreateScope();
+        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().RecordCashMovementAsync(request.Value);
+        if (result.IsFailure)
+        {
+            return result.Error.Message;
+        }
+
+        Updated = result.Value;
+        return null;
     }
 }

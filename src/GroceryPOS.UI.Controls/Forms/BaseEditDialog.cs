@@ -78,6 +78,12 @@ public abstract class BaseEditDialog : BaseForm
     /// <summary>True while <see cref="SaveAsync"/> runs.</summary>
     protected bool IsSaving => _saving;
 
+    /// <summary>
+    /// Whether the save button may be enabled once a save attempt has finished; dialogs that disable it while their
+    /// state has a blocker override this so a failed save does not re-enable it.
+    /// </summary>
+    protected virtual bool CanSave => true;
+
     /// <summary>When true (default), closing with unsaved changes asks for confirmation.</summary>
     protected bool ConfirmDiscard { get; set; } = true;
 
@@ -99,6 +105,7 @@ public abstract class BaseEditDialog : BaseForm
 
         Controls.Add(control);
         _fields.Add((label, control, new FieldSlot(control.Height, label is not null, fullWidth, startsRow)));
+        control.SizeChanged += (_, _) => PerformFieldLayout(); // e.g. a FormNote preview growing to two lines
 
         if (track)
         {
@@ -108,6 +115,17 @@ public abstract class BaseEditDialog : BaseForm
 
         PerformFieldLayout();
         return control;
+    }
+
+    /// <summary>
+    /// Adds a caption-less, full-width line of wrapped text (context, hint or live preview). Its height follows
+    /// the text, and the dialog re-lays out when it changes.
+    /// </summary>
+    protected FormNote AddNote(string? text, NoteTone tone = NoteTone.Normal, FontRole role = FontRole.Body, FontStyle style = FontStyle.Regular, int minLines = 1)
+    {
+        var note = new FormNote { FontRole = role, TextStyle = style, Tone = tone, MinLines = minLines, Width = _contentWidth };
+        note.Text = text;
+        return AddField(null, note, fullWidth: true, track: false);
     }
 
     /// <summary>
@@ -133,20 +151,31 @@ public abstract class BaseEditDialog : BaseForm
         try
         {
             var area = new Rectangle(OuterPadding, OuterPadding, _contentWidth, 0);
-            var layout = FieldGrid.Arrange(
-                _fields.Select(f => f.Slot with { FieldHeight = f.Field.Height }).ToList(), area, _columns, FieldGridMetrics.Default);
-            for (var i = 0; i < _fields.Count; i++)
+            FieldGridLayout layout;
+            var pass = 0;
+            bool heightsChanged;
+            do
             {
-                var (caption, field, _) = _fields[i];
-                var place = layout.Placements[i];
-                if (caption is not null)
+                // A field whose height follows its width (wrapped notes) can change height when placed: lay out again.
+                var heights = _fields.Select(f => f.Field.Height).ToArray();
+                layout = FieldGrid.Arrange(
+                    _fields.Select((f, i) => f.Slot with { FieldHeight = heights[i] }).ToList(), area, _columns, FieldGridMetrics.Default);
+                for (var i = 0; i < _fields.Count; i++)
                 {
-                    caption.Bounds = place.Label;
+                    var (caption, field, _) = _fields[i];
+                    var place = layout.Placements[i];
+                    if (caption is not null)
+                    {
+                        caption.Bounds = place.Label;
+                    }
+
+                    field.Location = place.Field.Location;
+                    field.Width = place.Field.Width;
                 }
 
-                field.Location = place.Field.Location;
-                field.Width = place.Field.Width;
+                heightsChanged = _fields.Where((f, i) => f.Field.Height != heights[i]).Any();
             }
+            while (heightsChanged && ++pass < 3);
 
             var y = layout.Bottom + FooterGap;
             _error.Location = new Point(OuterPadding, y);
@@ -241,7 +270,7 @@ public abstract class BaseEditDialog : BaseForm
             _saving = false;
             if (IsAlive)
             {
-                _save.Enabled = true;
+                _save.Enabled = CanSave;
                 _cancel.Enabled = true;
             }
         }
@@ -273,6 +302,7 @@ public abstract class BaseEditDialog : BaseForm
     {
         ModernNumericBox numeric => numeric.Value?.ToString(System.Globalization.CultureInfo.InvariantCulture),
         ModernComboBox combo => (combo.SelectedValue ?? combo.SelectedItem)?.ToString(),
+        ModernSegmentedControl segments => segments.SelectedIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
         CheckBox check => check.Checked ? "1" : "0",
         _ => control.Text,
     };

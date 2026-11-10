@@ -1,91 +1,76 @@
-using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Shifts;
-using GroceryPOS.UI.Controls.Buttons;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Inputs;
-using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Shifts;
 
 /// <summary>
 /// Mở ca: the opening float is pre-filled with the cash the previous shift left in the drawer, so the cashier
-/// only confirms (or corrects) what they counted. On success <see cref="Opened"/> holds the new shift.
+/// only confirms (or corrects) what they counted; a different amount is flagged in amber with the difference.
+/// On success <see cref="Opened"/> holds the new shift.
 /// </summary>
-internal sealed class OpenShiftDialog : ModernDialogForm
+internal sealed class OpenShiftDialog : BaseEditDialog
 {
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly decimal _suggestedFloat;
     private readonly ModernCurrencyBox _float;
     private readonly ModernTextBox _note;
-    private readonly ModernButton _open;
 
     public OpenShiftDialog(IServiceScopeFactory scopeFactory, decimal suggestedFloat, string? cashierName)
+        : base("Mở ca bán hàng", contentWidth: 376)
     {
         _scopeFactory = scopeFactory;
-        Text = "Mở ca bán hàng";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(420, 330);
+        _suggestedFloat = suggestedFloat;
+        SaveText = "Mở ca";
+        CancelDialogButton.Text = "Để sau";
+        ConfirmDiscard = false; // "Để sau" only postpones: nothing typed is worth a prompt
 
-        const int left = 24;
-        const int width = 372;
+        AddNote($"Thu ngân: {cashierName ?? "—"}", NoteTone.Normal, style: FontStyle.Bold);
+        AddNote("Đếm tiền trong két rồi xác nhận số tiền đầu ca.", NoteTone.Muted);
+        _float = AddField("Tiền đầu ca", new ModernCurrencyBox { Value = suggestedFloat });
+        _note = AddField("Ghi chú", new ModernTextBox { PlaceholderText = "Không bắt buộc", MaxLength = 500 });
 
-        var intro = new Label
-        {
-            Text = $"Thu ngân: {cashierName ?? "—"}\nĐếm tiền trong két rồi xác nhận số tiền đầu ca.",
-            Location = new Point(left, 16),
-            Size = new Size(width, 40),
-        };
-
-        var floatCaption = new Label { Text = "Tiền đầu ca", AutoSize = true, Location = new Point(left, 64) };
-        _float = new ModernCurrencyBox
-        {
-            Location = new Point(left, 86),
-            Width = width,
-            Value = suggestedFloat,
-            HelperText = suggestedFloat > 0 ? $"Ca trước để lại két {Vnd.Format(suggestedFloat)}" : "Ca trước không để lại tiền trong két",
-        };
-
-        var noteCaption = new Label { Text = "Ghi chú", AutoSize = true, Location = new Point(left, 160) };
-        _note = new ModernTextBox { Location = new Point(left, 182), Width = width, PlaceholderText = "Không bắt buộc", MaxLength = 500 };
-
-        ErrorLabel.Location = new Point(left, 236);
-        ErrorLabel.Size = new Size(width, 36);
-
-        _open = new ModernButton { Text = "Mở ca (Enter)", Variant = ButtonVariant.Primary, Location = new Point(left + width - 260, 276), Size = new Size(150, 40) };
-        _open.Click += async (_, _) => await OpenAsync();
-        var cancel = new ModernButton
-        {
-            Text = "Để sau",
-            Variant = ButtonVariant.Ghost,
-            Location = new Point(left + width - 100, 276),
-            Size = new Size(100, 40),
-            DialogResult = DialogResult.Cancel,
-        };
-
-        AcceptButton = _open;
-        CancelButton = cancel;
-        Controls.AddRange([intro, floatCaption, _float, noteCaption, _note, _open, cancel]);
-        Shown += (_, _) =>
-        {
-            _float.Focus();
-            _float.SelectAll();
-        };
+        _float.ValueChanged += (_, _) => ShowFloatHint();
+        ShowFloatHint();
     }
 
     public ShiftSummaryDto? Opened { get; private set; }
 
-    private Task OpenAsync() => RunSaveAsync(_open, async () =>
+    protected override void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        _float.SelectAll();
+    }
+
+    /// <summary>Helper under the float: what the previous shift left, or the difference in amber when it does not match.</summary>
+    private void ShowFloatHint()
+    {
+        var difference = _float.ValueOrZero - _suggestedFloat;
+        if (_suggestedFloat > 0 && difference != 0)
+        {
+            var sign = difference > 0 ? "+" : "−";
+            _float.SetWarning($"Ca trước để lại {Vnd.Format(_suggestedFloat)} – chênh {sign}{Vnd.Format(Math.Abs(difference))}");
+            return;
+        }
+
+        _float.ClearValidation();
+        _float.HelperText = _suggestedFloat > 0 ? $"Ca trước để lại két {Vnd.Format(_suggestedFloat)}" : "Ca trước không để lại tiền trong két";
+    }
+
+    protected override async Task<string?> SaveAsync()
     {
         _float.Commit();
         using var scope = _scopeFactory.CreateScope();
         var result = await scope.ServiceProvider.GetRequiredService<IShiftService>()
             .OpenAsync(new OpenShiftRequest(_float.ValueOrZero, string.IsNullOrWhiteSpace(_note.Text) ? null : _note.Text.Trim()));
-        if (result.IsSuccess)
+        if (result.IsFailure)
         {
-            Opened = result.Value;
+            return result.Error.Message;
         }
 
-        return (Result)result;
-    });
+        Opened = result.Value;
+        return null;
+    }
 }
