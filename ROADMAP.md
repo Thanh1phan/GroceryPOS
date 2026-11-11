@@ -82,4 +82,5 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 ## M8 – Polish
 - [x] Settings screen (Cấu hình: store info, receipt footer/paper with live preview, loyalty policy, sales rules; stored in `AppSettings`, audited; per-machine theme)
 - [x] Database backup/restore (Sao lưu dữ liệu: manual + daily automatic backup at start-up with retention, file check, restore with safety copy and restart, copy to USB; `system.backup`, audited)
-- [ ] Installer/publish profile
+- [x] Installer/publish profile (`win-x64` self-contained single-file + `win-x64-framework` profiles, Inno Setup installer with upgrade-safe data, portable zip, `build/publish.ps1`/`publish.sh`; data folder outside Program Files via `AppDataLocation` with `appsettings.local.json` overlay and one-time move of the old database; single instance per data folder; Thông tin phần mềm dialog; app icon)
+- [ ] CI workflow (GitHub Actions on windows-latest: build, test, publish, compile the installer, upload artifacts)

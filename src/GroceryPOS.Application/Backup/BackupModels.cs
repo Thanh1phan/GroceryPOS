@@ -20,7 +20,7 @@ public sealed class BackupOptions
 {
     public const string SectionName = "Backup";
 
-    /// <summary>Backup folder; empty = <c>%LocalAppData%\GroceryPOS\Backups</c>.</summary>
+    /// <summary>Backup folder; empty = <c>Backups</c> in the data folder (set by the app at start-up; <c>%LocalAppData%\GroceryPOS\Backups</c> otherwise).</summary>
     public string Folder { get; set; } = string.Empty;
 
     /// <summary>Automatic backup at start-up when the newest backup is at least this old; 0 turns it off.</summary>

@@ -5,7 +5,7 @@ public sealed class LoggingOptions
 {
     public const string SectionName = "AppLogging";
 
-    /// <summary>Log folder; relative paths are resolved against the app folder. Default: %LocalAppData%\GroceryPOS\logs.</summary>
+    /// <summary>Log folder; the app points it at <c>logs</c> in the data folder (<c>AppDataLocation.ApplyTo</c>), where relative paths are resolved too.</summary>
     public string? Directory { get; set; }
 
     /// <summary>Verbose, Debug, Information, Warning, Error or Fatal.</summary>

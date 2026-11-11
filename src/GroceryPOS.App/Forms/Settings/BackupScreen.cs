@@ -506,7 +506,8 @@ internal sealed class BackupScreen : UserControl
         Log.CloseAndFlush();
         if (Environment.ProcessPath is { } exe)
         {
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+            // The new copy waits for this one to release the single-instance lock (see SingleInstance).
+            Process.Start(new ProcessStartInfo(exe, Hosting.SingleInstance.RestartArgument) { UseShellExecute = true });
         }
 
         Environment.Exit(0);

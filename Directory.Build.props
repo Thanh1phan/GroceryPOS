@@ -6,6 +6,11 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <Company>GroceryPOS</Company>
     <Product>GroceryPOS</Product>
-    <Version>0.1.0</Version>
+    <!-- Single source of the app version: shown in Thông tin phần mềm, stamped on the installer by build/publish.ps1. -->
+    <Version>0.9.0</Version>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <!-- Line numbers in logged stack traces without shipping .pdb files next to the exe. -->
+    <DebugType>embedded</DebugType>
   </PropertyGroup>
 </Project>

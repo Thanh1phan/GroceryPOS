@@ -19,6 +19,8 @@ tests/
   GroceryPOS.Application.Tests  Application tests (auth, checkout, POS cart, returns, shifts, POS lookup, inventory, purchasing, reports, formatting)
   GroceryPOS.UI.Controls.Tests  Theme & input core tests (color math, WCAG contrast, state colors, number/date parsing, date presets, accent-insensitive matching, grid search/sort/paging, pager links, badge/avatar/trend/surface colors, sidebar menu filtering & layout, tab strip overflow, toast queue & layout, dialog specs, busy-overlay timing, load sequencing, dirty tracking, edit-dialog field grid, list command rules)
   GroceryPOS.Infrastructure.Tests  Persistence tests on in-memory SQLite (migrations, round-trips, model/migration drift, DI composition, logging)
+build/                       publish.ps1 / publish.sh (release builds), make_icon.py
+installer/                   GroceryPOS.iss (Inno Setup installer)
 ```
 
 Conventions:
@@ -64,7 +66,38 @@ dotnet test GroceryPOS.sln
 dotnet run --project src/GroceryPOS.App      # Windows
 ```
 
-First start creates `grocerypos.db` (SQLite) next to the app and the default account **`admin` / `admin123`**, which must be changed at the first sign-in.
+First start creates `grocerypos.db` (SQLite) in the data folder (below) and the default account **`admin` / `admin123`**, which must be changed at the first sign-in.
+
+## Data folder
+
+The program folder is treated as read-only (it may be `C:\Program Files\GroceryPOS`, and an upgrade replaces it). Everything the app writes goes to one **data folder** resolved by `Infrastructure.Hosting.AppDataLocation`:
+
+| Priority | When | Data folder |
+|---|---|---|
+| 1 | `portable.txt` next to `GroceryPOS.exe` | `data\` beside the exe (USB stick, no install) |
+| 2 | environment variable `GROCERYPOS_DATA` | that folder |
+| 3 | `Paths:DataDirectory` in appsettings.json | that folder (relative = from the program folder) |
+| 4 | default | `%LocalAppData%\GroceryPOS` |
+
+It holds `grocerypos.db` (a relative SQLite `Data Source` is resolved here), `logs\`, `Backups\`, `parked-orders.json`, `ui-preferences.json` and the optional **`appsettings.local.json`**, which is layered over the shipped appsettings.json – put the shop's own changes there (SQL Server connection string, backup folder, log level…) so a new version never resets them. Explicit absolute paths in appsettings still win. A database left next to the exe by earlier versions is copied into the data folder once at start-up (the old file is kept).
+
+Only one copy of the app runs per data folder; starting it again brings the open window to the front. **Thông tin phần mềm** (user menu, top right) shows the version and every path, opens the data / log folders and copies the details for support (SQL Server passwords masked).
+
+## Publishing & installer
+
+```powershell
+./build/publish.ps1                      # tests → self-contained publish → portable zip → installer
+./build/publish.ps1 -FrameworkDependent  # smaller build for PCs with the .NET Desktop Runtime 8.0 (x64)
+```
+
+```bash
+./build/publish.sh                       # Linux/macOS CI: tests, win-x64 publish, portable zip (no installer)
+```
+
+- Publish profiles in `src/GroceryPOS.App/Properties/PublishProfiles`: **`win-x64`** – one self-contained `GroceryPOS.exe` (~75 MB, runtime and native SQLite inside, nothing to install) plus `appsettings.json`; **`win-x64-framework`** – the same without the runtime (~27 MB). Release builds embed debug symbols so logged stack traces keep line numbers.
+- `installer/GroceryPOS.iss` (Inno Setup 6.3+, `winget install JRSoftware.InnoSetup`) → `artifacts/installer/GroceryPOS-Setup-<version>.exe`: installs to Program Files (or per user without admin rights), Start menu + optional desktop shortcut, asks to close a running GroceryPOS before upgrading (`AppMutex`), checks for the .NET Desktop Runtime in the framework-dependent variant, and never removes the data folder on uninstall. Uses Vietnamese wizard texts when `Vietnamese.isl` is installed in Inno's Languages folder.
+- `artifacts/GroceryPOS-<version>-portable.zip` – the self-contained build with `portable.txt`, for running from a USB stick.
+- The version comes from `<Version>` in `Directory.Build.props`; the icon is `src/GroceryPOS.App/app.ico` (`build/make_icon.py`).
 
 ## Database
 
@@ -107,24 +140,24 @@ Logging is configured in the `AppLogging` section (`LoggingOptions`):
                 "RetainedFileCountLimit": 30, "FileSizeLimitMegabytes": 10, "WriteErrorLog": true }
 ```
 
-Files go to `%LocalAppData%\GroceryPOS\logs` by default (relative `Directory` = next to the app): `grocerypos-yyyyMMdd.log`
+Files go to `logs` in the data folder by default (a relative `Directory` is taken from the data folder): `grocerypos-yyyyMMdd.log`
 (daily, rolls over by size, 30 days) and `errors-yyyyMMdd.log` (Error/Fatal only, 90 days). Every line carries the signed-in
 user, e.g. `[INF] (admin) …AuthService: User admin signed in as Admin`. Business actions are additionally kept in the
 database audit log (`IAuditService`).
 
 ## Store & receipt settings
 
-Parked carts are counter-local working state, kept in a JSON file per machine (`ParkedOrders:FilePath`, default `%LocalAppData%\GroceryPOS\parked-orders.json`; writes are atomic and an unreadable file is set aside as `.bad`).
+Parked carts are counter-local working state, kept in a JSON file per machine (`ParkedOrders:FilePath`, default `parked-orders.json` in the data folder; writes are atomic and an unreadable file is set aside as `.bad`).
 
 The `Store` section of appsettings (`StoreProfile`) holds the **defaults** for what is printed on receipts: `Name`, `Address`, `Phone`, `TaxCode` (MST, optional), `ReceiptFooter` (`\n` for several lines), `ReceiptPaperWidthMm` (80 or 58) and `PreviewReceiptAfterCheckout`.
 
-The **Cấu hình** screen (`settings.manage`) edits the store info, receipt footer/paper/preview, loyalty policy (VND per point, value of a point; 0 turns either off) and sales rules (return window, negative stock, mandatory shift, cash variance that needs a note). Values are stored in the `AppSettings` table (key/value, shared by every counter on the same database) on top of the appsettings defaults; `Application.Settings.StoreSettingsState` holds the values in force and the container resolves `StoreProfile` / `SalesOptions` from it per scope, so screens opened after a save use the new values. Saves are validated (`StoreSettingsValidator`), only run with changes, and audited as `settings.changed` with every old → new value. The light/dark theme is a per-machine preference in `%LocalAppData%\GroceryPOS\ui-preferences.json`.
+The **Cấu hình** screen (`settings.manage`) edits the store info, receipt footer/paper/preview, loyalty policy (VND per point, value of a point; 0 turns either off) and sales rules (return window, negative stock, mandatory shift, cash variance that needs a note). Values are stored in the `AppSettings` table (key/value, shared by every counter on the same database) on top of the appsettings defaults; `Application.Settings.StoreSettingsState` holds the values in force and the container resolves `StoreProfile` / `SalesOptions` from it per scope, so screens opened after a save use the new values. Saves are validated (`StoreSettingsValidator`), only run with changes, and audited as `settings.changed` with every old → new value. The light/dark theme is a per-machine preference in `ui-preferences.json` in the data folder.
 
 ## Backup & restore
 
 The **Sao lưu dữ liệu** screen (`system.backup`, Admin only by default) lists the backups in the backup folder with a freshness badge, checks the selected file (integrity, schema version, number of products / customers / invoices, last invoice) and offers **Sao lưu ngay** (Ctrl+S), **Phục hồi** (from the list or any file, e.g. a USB stick), **Sao chép ra…** (copy to USB / another drive), **Xóa** and **Mở thư mục**.
 
-- Configured in the `Backup` section of appsettings (`BackupOptions`): `Folder` (empty = `%LocalAppData%\GroceryPOS\Backups`), `AutomaticIntervalHours` (default 24: a backup is made at start-up when the newest one is older; 0 = off), `KeepAutomatic` (14) and `KeepBeforeRestore` (5). Manual backups are never pruned.
+- Configured in the `Backup` section of appsettings (`BackupOptions`): `Folder` (empty = `Backups` in the data folder), `AutomaticIntervalHours` (default 24: a backup is made at start-up when the newest one is older; 0 = off), `KeepAutomatic` (14) and `KeepBeforeRestore` (5). Manual backups are never pruned.
 - Files are named `grocerypos-yyyyMMdd-HHmmss-{manual|auto|prerestore}.db`. SQLite uses the online backup API (a consistent copy while the app runs, written to `.tmp` first); SQL Server uses `BACKUP DATABASE … WITH COPY_ONLY` to a `.bak` path on the server and is restored with SQL Server Management Studio.
 - A restore refuses unreadable files and backups made by a newer version, saves the current data as a "Trước khi phục hồi" copy, replaces the database, applies pending migrations (older backups are upgraded), writes `backup.restored` to the audit log of the restored data and restarts the app. Creating and deleting backups are audited as `backup.created` / `backup.deleted`.
 

@@ -20,6 +20,7 @@ public sealed class LoginForm : Form
         _scopeFactory = scopeFactory;
 
         Text = "GroceryPOS - Đăng nhập";
+        Icon = Hosting.AppInfo.Icon ?? Icon;
         ClientSize = new Size(380, 360);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;

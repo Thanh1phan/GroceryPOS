@@ -5,20 +5,20 @@ using Serilog;
 namespace GroceryPOS.App.Preferences;
 
 /// <summary>
-/// Per-machine display preferences (light/dark theme) kept in <c>%LocalAppData%\GroceryPOS\ui-preferences.json</c>.
+/// Per-machine display preferences (light/dark theme) kept in <c>ui-preferences.json</c> in the data folder (<c>AppDataLocation</c>).
 /// Unlike the store settings they are not shared through the database: the counter by the window may want the light
 /// theme while the back office prefers dark. Saved whenever the theme changes (top bar toggle or Cấu hình → Giao diện).
 /// </summary>
 internal static class UiPreferences
 {
-    private static readonly string FilePath =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GroceryPOS", "ui-preferences.json");
+    private static string FilePath = string.Empty;
 
     private sealed record Data(string Theme);
 
     /// <summary>Applies the saved theme and starts saving later theme changes.</summary>
-    public static void Initialize()
+    public static void Initialize(string filePath)
     {
+        FilePath = filePath;
         try
         {
             if (File.Exists(FilePath)

@@ -1,4 +1,5 @@
 using GroceryPOS.App.Forms;
+using GroceryPOS.App.Hosting;
 using GroceryPOS.App.Preferences;
 using GroceryPOS.Application;
 using GroceryPOS.Application.Abstractions;
@@ -6,6 +7,7 @@ using GroceryPOS.Application.Backup;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Infrastructure;
+using GroceryPOS.Infrastructure.Hosting;
 using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Seeding;
@@ -27,23 +29,83 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         System.Windows.Forms.Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
 
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppContext.BaseDirectory)
+        try
+        {
+            Run();
+        }
+        catch (Exception exception)
+        {
+            // Start-up failures (unwritable data folder, broken appsettings, database that cannot be opened) happen
+            // before the themed dialogs and the global handlers exist – log what we can and explain in a plain box.
+            Log.Fatal(exception, "GroceryPOS không khởi động được");
+            Log.CloseAndFlush();
+            MessageBox.Show(
+                $"GroceryPOS không khởi động được:\n{exception.Message}\n\nKiểm tra quyền ghi vào thư mục dữ liệu và file appsettings.json, rồi mở lại.",
+                "GroceryPOS",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private static void Run()
+    {
+        var appDirectory = AppContext.BaseDirectory;
+        var shipped = new ConfigurationBuilder()
+            .SetBasePath(appDirectory)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .Build();
+
+        // The program folder may be read-only (Program Files): everything written goes to the data folder, and the
+        // shop's own overrides live there in appsettings.local.json so an upgrade never resets them.
+        var location = AppDataLocation.ForCurrentProcess(shipped.GetSection(PathOptions.SectionName).Get<PathOptions>()?.DataDirectory);
+        location.EnsureCreated();
+
+        var restarted = Environment.GetCommandLineArgs().Contains(SingleInstance.RestartArgument, StringComparer.OrdinalIgnoreCase);
+        using var instance = SingleInstance.TryAcquire(location.DataDirectory, restarted ? TimeSpan.FromSeconds(15) : TimeSpan.Zero);
+        if (instance is null)
+        {
+            return; // the running copy was brought to the front
+        }
+
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(appDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+            .AddJsonFile(location.LocalSettingsPath, optional: true, reloadOnChange: false)
             .Build();
 
         var database = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
         var logging = configuration.GetSection(LoggingOptions.SectionName).Get<LoggingOptions>() ?? new LoggingOptions();
         var seed = configuration.GetSection(SeedOptions.SectionName).Get<SeedOptions>() ?? new SeedOptions();
-        var parkedOrders = configuration.GetSection(ParkedOrderOptions.SectionName).Get<ParkedOrderOptions>();
+        var parkedOrders = configuration.GetSection(ParkedOrderOptions.SectionName).Get<ParkedOrderOptions>() ?? new ParkedOrderOptions();
         var store = configuration.GetSection(StoreProfile.SectionName).Get<StoreProfile>() ?? StoreProfile.Default;
         var backup = configuration.GetSection(BackupOptions.SectionName).Get<BackupOptions>() ?? new BackupOptions();
 
+        var legacyDatabase = database.Provider == DatabaseProvider.Sqlite
+            ? AppDataLocation.LegacySqlitePath(database.ConnectionString, appDirectory)
+            : null;
+        location.ApplyTo(database, logging, parkedOrders, backup);
+        var movedDatabase = database.Provider == DatabaseProvider.Sqlite
+            && AppDataLocation.SqliteFilePath(database.ConnectionString) is { } databaseFile
+            && AppDataLocation.CopyLegacyDatabase(legacyDatabase, databaseFile);
+
         var services = new ServiceCollection();
+        services.AddSingleton(location);
+        services.AddSingleton(new SupportInfo(
+            AppInfo.Version, AppInfo.Runtime, appDirectory, location, database, logging.ResolveDirectory(), backup.ResolveFolder()));
         services.AddGroceryLogging(logging);
         services.AddInfrastructure(database, seed, parkedOrders);
         services.AddApplication(store: store, backup: backup);
         using var provider = services.BuildServiceProvider();
+
+        var logger = provider.GetRequiredService<Serilog.ILogger>();
+        Log.Logger = logger; // static Log for UI code that has no injected logger (e.g. printing)
+        logger.Information(
+            "GroceryPOS {Version} khởi động · dữ liệu: {DataDirectory} ({Mode}) · CSDL: {Provider}",
+            AppInfo.Version, location.DataDirectory, location.Mode, database.Provider);
+        if (movedDatabase)
+        {
+            logger.Information("Đã chuyển cơ sở dữ liệu cũ {Legacy} sang thư mục dữ liệu {DataDirectory}", legacyDatabase, location.DataDirectory);
+        }
 
         using (var scope = provider.CreateScope())
         {
@@ -58,9 +120,7 @@ internal static class Program
 
         var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
         var currentUser = provider.GetRequiredService<ICurrentUser>();
-        var logger = provider.GetRequiredService<Serilog.ILogger>();
-        Log.Logger = logger; // static Log for UI code that has no injected logger (e.g. printing)
-        UiPreferences.Initialize(); // saved light/dark theme of this machine
+        UiPreferences.Initialize(location.UiPreferencesPath); // saved light/dark theme of this machine
 
         void ReportUnhandled(Exception exception, bool onUiThread)
         {

@@ -12,7 +12,7 @@ public sealed class ParkedOrderOptions
 {
     public const string SectionName = "ParkedOrders";
 
-    /// <summary>JSON file path; empty = <c>%LocalAppData%\GroceryPOS\parked-orders.json</c>.</summary>
+    /// <summary>JSON file path; empty = <c>parked-orders.json</c> in the data folder (<c>%LocalAppData%\GroceryPOS</c> by default).</summary>
     public string? FilePath { get; set; }
 
     public string ResolveFilePath() =>

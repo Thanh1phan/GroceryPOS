@@ -15,6 +15,9 @@ using GroceryPOS.UI.Controls.Navigation.Core;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
 
+using GroceryPOS.App.Forms.Dialogs;
+using GroceryPOS.Infrastructure.Hosting;
+
 namespace GroceryPOS.App.Forms;
 
 /// <summary>Application shell: sidebar + top bar around a content area that swaps per selected menu item.</summary>
@@ -68,6 +71,7 @@ public sealed class MainForm : Form
         _currentUser = currentUser;
 
         Text = "GroceryPOS";
+        Icon = Hosting.AppInfo.Icon ?? Icon;
         ClientSize = new Size(1200, 760);
         StartPosition = FormStartPosition.CenterScreen;
         WindowState = FormWindowState.Maximized;
@@ -112,6 +116,7 @@ public sealed class MainForm : Form
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("Đổi mật khẩu", null, (_, _) => ChangePassword());
+        menu.Items.Add("Thông tin phần mềm", null, (_, _) => ShowAbout());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Đăng xuất", null, async (_, _) => await SignOutAsync());
         return menu;
@@ -120,6 +125,13 @@ public sealed class MainForm : Form
     private void ChangePassword()
     {
         using var dialog = new ChangePasswordForm(_scopeFactory, mandatory: false);
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowAbout()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        using var dialog = new AboutDialog(scope.ServiceProvider.GetRequiredService<SupportInfo>());
         dialog.ShowDialog(this);
     }
 
