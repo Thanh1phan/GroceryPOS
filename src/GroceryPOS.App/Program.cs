@@ -12,6 +12,7 @@ using GroceryPOS.Infrastructure.Logging;
 using GroceryPOS.Infrastructure.Persistence;
 using GroceryPOS.Infrastructure.Persistence.Seeding;
 using GroceryPOS.Infrastructure.Sales;
+using GroceryPOS.Presentation;
 using GroceryPOS.UI.Controls.Feedback;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -95,6 +96,7 @@ internal static class Program
         services.AddGroceryLogging(logging);
         services.AddInfrastructure(database, seed, parkedOrders);
         services.AddApplication(store: store, backup: backup);
+        services.AddPresentation();
         using var provider = services.BuildServiceProvider();
 
         var logger = provider.GetRequiredService<Serilog.ILogger>();
@@ -173,7 +175,7 @@ internal static class Program
                 }
             }
 
-            using var main = new MainForm(scopeFactory, currentUser);
+            using var main = new MainForm(provider, currentUser);
             System.Windows.Forms.Application.Run(main);
         }
     }

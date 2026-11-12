@@ -25,7 +25,9 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Permission-aware menus/buttons (sidebar filtered by permission, screen buttons disabled)
 - [x] User management (`UserManagementService`: create with temporary password, edit name/role, reset password, unlock, activate/deactivate; privilege ceiling + last-administrator guard) and screen (Người dùng)
 - [x] Role management (`RoleService`: custom roles, system names fixed, Admin locked, delete only unused roles) and permission matrix screen (Phân quyền: grouped rows, tri-state group toggles, highlighted unsaved changes)
-- [ ] Move the WinForms screens to MVP (Presenter + IView) once the base classes exist
+- [x] MVP foundation: `GroceryPOS.Presentation` (`Presenter<TView>`, `IView`, `AddPresentation()`), presenter tests project; Danh mục list + edit dialog migrated as the reference
+- [ ] Migrate the remaining master-data screens to MVP (suppliers, customers, products, users, roles)
+- [ ] Migrate the operational screens to MVP (inventory, purchasing, supplier debt, shifts, settings, backup, audit log, reports, dashboard; POS and returns last)
 - [x] Global exception handling + Serilog wiring in WinForms host (synchronous STA `Main`)
 
 ## M3 – UI component library (GroceryPOS.UI.Controls)
@@ -83,4 +85,4 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Settings screen (Cấu hình: store info, receipt footer/paper with live preview, loyalty policy, sales rules; stored in `AppSettings`, audited; per-machine theme)
 - [x] Database backup/restore (Sao lưu dữ liệu: manual + daily automatic backup at start-up with retention, file check, restore with safety copy and restart, copy to USB; `system.backup`, audited)
 - [x] Installer/publish profile (`win-x64` self-contained single-file + `win-x64-framework` profiles, Inno Setup installer with upgrade-safe data, portable zip, `build/publish.ps1`/`publish.sh`; data folder outside Program Files via `AppDataLocation` with `appsettings.local.json` overlay and one-time move of the old database; single instance per data folder; Thông tin phần mềm dialog; app icon)
-- [ ] CI workflow (GitHub Actions on windows-latest: build, test, publish, compile the installer, upload artifacts)
+- [x] CI workflow (GitHub Actions: Linux build + tests, then windows-latest `publish.ps1` – tests, publish, Inno Setup installer – with installer/portable zip/test results uploaded as artifacts)

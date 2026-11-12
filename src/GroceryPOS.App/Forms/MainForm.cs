@@ -59,15 +59,17 @@ public sealed class MainForm : Form
         }),
     });
 
+    private readonly IServiceProvider _services;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ICurrentUser _currentUser;
     private readonly SidebarNav _sidebar;
     private readonly TopBar _topBar;
     private readonly Panel _content;
 
-    public MainForm(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public MainForm(IServiceProvider services, ICurrentUser currentUser)
     {
-        _scopeFactory = scopeFactory;
+        _services = services;
+        _scopeFactory = services.GetRequiredService<IServiceScopeFactory>();
         _currentUser = currentUser;
 
         Text = "GroceryPOS";
@@ -153,7 +155,7 @@ public sealed class MainForm : Form
             "dashboard" => new DashboardScreen(_scopeFactory, _currentUser, Navigate),
             "pos" => new PosScreen(_scopeFactory, _currentUser),
             "returns" => new ReturnScreen(_scopeFactory, _currentUser),
-            "categories" => new CategoryListScreen(_scopeFactory, _currentUser),
+            "categories" => new CategoryListScreen(_services),
             "products" => new ProductListScreen(_scopeFactory, _currentUser),
             "inventory" => new InventoryScreen(_scopeFactory, _currentUser),
             "purchases" => new PurchaseScreen(_scopeFactory, _currentUser),

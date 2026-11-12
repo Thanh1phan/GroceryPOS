@@ -1,7 +1,7 @@
-using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Domain.Identity;
+using GroceryPOS.Presentation.Catalog;
+using GroceryPOS.Presentation.Mvp;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Forms.Core;
 using GroceryPOS.UI.Controls.Icons;
@@ -10,74 +10,53 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Screens;
 
-/// <summary>Category CRUD screen (deactivate/activate only — a category in use can never be hard-deleted).</summary>
-internal sealed class CategoryListScreen : BaseListView<CategoryDto>
+/// <summary>Danh mục screen – passive MVP view; the logic lives in <see cref="CategoryListPresenter"/>.</summary>
+internal sealed class CategoryListScreen : BaseListView<CategoryDto>, ICategoryListView
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _services;
+    private readonly CategoryListPresenter _presenter;
 
-    public CategoryListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public CategoryListScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        var canManage = currentUser.HasPermission(Permissions.CategoriesManage);
+        _services = services;
+        _presenter = services.GetRequiredService<CategoryListPresenter>();
+        _presenter.Attach(this);
+        var canManage = _presenter.CanManage;
 
         Grid.EmptyText = "Chưa có danh mục nào.";
         Grid.AddTextColumn(nameof(CategoryDto.Name), "Tên danh mục", width: 240);
         Grid.AddTextColumn(nameof(CategoryDto.Description), "Mô tả");
         Grid.AddCheckColumn(nameof(CategoryDto.IsActive), "Đang dùng");
 
-        AddCommand(new ListCommand<CategoryDto>("Thêm danh mục") { Allowed = canManage }, () => Open(null), ButtonVariant.Primary, Glyphs.Add);
-        AddCommand(new ListCommand<CategoryDto>("Sửa") { Allowed = canManage }, category => Open(category), iconGlyph: Glyphs.Edit, isDefault: true);
+        AddCommand(new ListCommand<CategoryDto>("Thêm danh mục") { Allowed = canManage }, _presenter.AddAsync, ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<CategoryDto>("Sửa") { Allowed = canManage }, _presenter.EditAsync, iconGlyph: Glyphs.Edit, isDefault: true);
         AddCommand(
             new ListCommand<CategoryDto>("Ngừng dùng")
             {
                 Allowed = canManage,
-                TextFor = c => c.IsActive ? "Ngừng dùng" : "Dùng lại",
+                TextFor = CategoryListPresenter.ToggleText,
             },
-            ToggleActiveAsync);
+            _presenter.ToggleActiveAsync);
     }
+
+    bool IView.IsAlive => IsAlive;
 
     protected override object? KeyOf(CategoryDto item) => item.Id;
 
-    protected override async Task<IReadOnlyList<CategoryDto>?> LoadItemsAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<ICategoryService>().ListAsync(cancellationToken);
-        if (result.IsFailure)
-        {
-            ToastError(result.Error.Message, "Danh mục");
-            return null;
-        }
+    protected override Task<IReadOnlyList<CategoryDto>?> LoadItemsAsync(CancellationToken cancellationToken) =>
+        _presenter.LoadAsync(cancellationToken);
 
-        return result.Value;
+    bool ICategoryListView.OpenEditor(CategoryDto? category)
+    {
+        using var dialog = new CategoryEditForm(_services.GetRequiredService<CategoryEditPresenter>().For(category));
+        return dialog.ShowDialog(this) == DialogResult.OK;
     }
 
-    private void Open(CategoryDto? category)
-    {
-        using var dialog = new CategoryEditForm(_scopeFactory, category);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            ToastSuccess(category is null ? "Đã thêm danh mục mới." : $"Đã lưu danh mục {category.Name}.");
-            RequestRefresh();
-        }
-    }
+    Task ICategoryListView.ReloadAsync() => RefreshDataAsync();
 
-    private async Task ToggleActiveAsync(CategoryDto category)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var categories = scope.ServiceProvider.GetRequiredService<ICategoryService>();
-        var result = await (category.IsActive ? categories.DeactivateAsync(category.Id) : categories.ActivateAsync(category.Id));
-        if (!IsAlive)
-        {
-            return;
-        }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-        if (result.IsFailure)
-        {
-            ShowWarning(result.Error.Message, "Danh mục");
-            return;
-        }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 
-        ToastSuccess(category.IsActive ? $"Đã ngừng dùng danh mục {category.Name}." : $"Đã dùng lại danh mục {category.Name}.");
-        await RefreshDataAsync();
-    }
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

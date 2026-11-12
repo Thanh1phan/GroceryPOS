@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\GroceryPOS.Application\GroceryPOS.Application.csproj" />
     <ProjectReference Include="..\GroceryPOS.Infrastructure\GroceryPOS.Infrastructure.csproj" />
+    <ProjectReference Include="..\GroceryPOS.Presentation\GroceryPOS.Presentation.csproj" />
     <ProjectReference Include="..\GroceryPOS.UI.Controls\GroceryPOS.UI.Controls.csproj" />
   </ItemGroup>
   <ItemGroup>

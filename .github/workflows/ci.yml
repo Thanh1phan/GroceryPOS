@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  # Fast feedback on Linux: the WinForms app builds with EnableWindowsTargeting; all test projects are net8.0.
+  test-linux:
+    name: Build & test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - run: dotnet restore GroceryPOS.sln
+      - run: dotnet build GroceryPOS.sln -c Release --no-restore
+      - run: dotnet test GroceryPOS.sln -c Release --no-build --logger trx --results-directory TestResults
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: TestResults/*.trx
+          if-no-files-found: ignore
+
+  # Release build on Windows: tests again on the real platform, self-contained exe, portable zip and the Inno Setup installer.
+  release-windows:
+    name: Publish & installer (Windows)
+    runs-on: windows-latest
+    needs: test-linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+      - name: Build release (tests, publish, portable zip, installer)
+        shell: pwsh
+        run: ./build/publish.ps1
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: GroceryPOS-Setup
+          path: artifacts/installer/*.exe
+          if-no-files-found: error
+      - name: Upload portable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: GroceryPOS-portable
+          path: artifacts/*-portable.zip
+          if-no-files-found: error
