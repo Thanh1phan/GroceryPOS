@@ -12,6 +12,9 @@ public interface IView
 
     void ShowWarning(string message, string title);
 
+    /// <summary>Asks a yes/no question; true when the user chose <paramref name="confirmText"/>.</summary>
+    bool Confirm(string message, string title, string confirmText);
+
     void ToastSuccess(string message, string? title = null);
 
     void ToastError(string message, string? title = null);

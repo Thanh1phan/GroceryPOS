@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-13
+- **Nhà cung cấp** and **Khách hàng** moved to MVP: new `Presentation.Partners` presenters (`SupplierListPresenter`, `SupplierEditPresenter`, `CustomerListPresenter`, `CustomerEditPresenter`) hold permissions, confirmations, toasts and validation; `SupplierListScreen`, `CustomerListScreen` and their edit dialogs are now passive views resolved through DI.
+- `IView.Confirm` lets presenters ask yes/no questions (stop trading, deactivate a customer); new `Mvp.FormInput` with `Optional` (trim, blank → null) and `FirstError` (first failing property + message).
+- Improvements: a failed save now puts the cursor in the offending field (e.g. Mã số thuế, Số điện thoại, Email) instead of leaving focus on the button; stopping/resuming a supplier now confirms with a toast ("Đã ngừng giao dịch với …").
+- 41 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 427, Presentation 70 – all passing).
+
 ## 2026-11-12
 - **MVP foundation**: new `GroceryPOS.Presentation` project (net8.0, no WinForms) with `Mvp.Presenter<TView>` (single view attach, one DI scope per action via `UseAsync`/`UseScopeAsync`, closed-view checks after awaits), `Mvp.IView` (warnings and toasts) and `AddPresentation()` registering presenters as transient.
 - **Danh mục** is the first screen on MVP: `CategoryListPresenter` (permission, load with error toast, add/edit flow, stop/resume with confirmation toasts, guarded against a screen closed mid-action) and `CategoryEditPresenter` (title and initial values, blank description → null, FluentValidation before saving, focus on the name field) – `CategoryListScreen` and `CategoryEditForm` are now passive views. `MainForm` receives the service provider to resolve presenters.

@@ -1,7 +1,7 @@
-using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Domain.Identity;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Partners;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Forms.Core;
 using GroceryPOS.UI.Controls.Icons;
@@ -10,18 +10,18 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Screens;
 
-/// <summary>Customer (loyalty member) list: add/edit, loyalty history, deactivate/reactivate. Search covers code, name, phone and email.</summary>
-internal sealed class CustomerListScreen : BaseListView<CustomerDto>
+/// <summary>Khách hàng screen – passive MVP view; the logic lives in <see cref="CustomerListPresenter"/>. Search covers code, name, phone and email.</summary>
+internal sealed class CustomerListScreen : BaseListView<CustomerDto>, ICustomerListView
 {
-    private const string Caption = "Khách hàng";
+    private readonly IServiceProvider _services;
+    private readonly CustomerListPresenter _presenter;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly bool _canManage;
-
-    public CustomerListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public CustomerListScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _canManage = currentUser.HasPermission(Permissions.CustomersManage);
+        _services = services;
+        _presenter = services.GetRequiredService<CustomerListPresenter>();
+        _presenter.Attach(this);
+        var canManage = _presenter.CanManage;
 
         Grid.EmptyText = "Chưa có khách hàng nào.";
         Grid.AddTextColumn(nameof(CustomerDto.Code), "Mã KH", width: 100);
@@ -32,86 +32,50 @@ internal sealed class CustomerListScreen : BaseListView<CustomerDto>
         Grid.AddMoneyColumn(nameof(CustomerDto.TotalSpent), "Tổng chi tiêu", width: 140);
         Grid.AddCheckColumn(nameof(CustomerDto.IsActive), "Hoạt động");
 
-        AddCommand(new ListCommand<CustomerDto>("Thêm khách hàng") { Allowed = _canManage }, () => Open(null), ButtonVariant.Primary, Glyphs.Add);
-        AddCommand(new ListCommand<CustomerDto>("Sửa") { Allowed = _canManage }, customer => Open(customer), iconGlyph: Glyphs.Edit);
-        AddCommand(new ListCommand<CustomerDto>("Lịch sử điểm"), ShowHistory, iconGlyph: Glyphs.History);
+        AddCommand(new ListCommand<CustomerDto>("Thêm khách hàng") { Allowed = canManage }, _presenter.AddAsync, ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<CustomerDto>("Sửa") { Allowed = canManage }, _presenter.EditAsync, iconGlyph: Glyphs.Edit);
+        AddCommand(new ListCommand<CustomerDto>("Lịch sử điểm"), _presenter.ShowHistory, iconGlyph: Glyphs.History);
         AddCommand(
             new ListCommand<CustomerDto>("Ngừng hoạt động")
             {
-                Allowed = _canManage,
-                TextFor = c => c.IsActive ? "Ngừng hoạt động" : "Kích hoạt lại",
+                Allowed = canManage,
+                TextFor = CustomerListPresenter.ToggleText,
             },
-            ToggleActiveAsync);
+            _presenter.ToggleActiveAsync);
     }
+
+    bool IView.IsAlive => IsAlive;
 
     protected override object? KeyOf(CustomerDto item) => item.Id;
 
-    protected override async Task<IReadOnlyList<CustomerDto>?> LoadItemsAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<ICustomerService>().ListAsync(cancellationToken: cancellationToken);
-        if (result.IsFailure)
-        {
-            ToastError(result.Error.Message, Caption);
-            return null;
-        }
+    protected override Task<IReadOnlyList<CustomerDto>?> LoadItemsAsync(CancellationToken cancellationToken) =>
+        _presenter.LoadAsync(cancellationToken);
 
-        return result.Value;
+    /// <summary>
+    /// Enter/double-click: edit for managers, otherwise the (read-only) loyalty history. Exceptions surface
+    /// through the WinForms synchronization context to the global handler.
+    /// </summary>
+    protected override async void OnItemActivated(CustomerDto item) => await _presenter.ActivateAsync(item);
+
+    bool ICustomerListView.OpenEditor(CustomerDto? customer)
+    {
+        using var dialog = new CustomerEditForm(_services.GetRequiredService<CustomerEditPresenter>().For(customer));
+        return dialog.ShowDialog(this) == DialogResult.OK;
     }
 
-    /// <summary>Enter/double-click: edit for managers, otherwise the (read-only) loyalty history.</summary>
-    protected override void OnItemActivated(CustomerDto item)
+    void ICustomerListView.OpenLoyaltyHistory(CustomerDto customer)
     {
-        if (_canManage)
-        {
-            Open(item);
-        }
-        else
-        {
-            ShowHistory(item);
-        }
-    }
-
-    private void Open(CustomerDto? customer)
-    {
-        using var dialog = new CustomerEditForm(_scopeFactory, customer);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            ToastSuccess(customer is null ? "Đã thêm khách hàng mới." : $"Đã lưu khách hàng {customer.Name}.");
-            RequestRefresh();
-        }
-    }
-
-    private void ShowHistory(CustomerDto customer)
-    {
-        using var dialog = new CustomerLoyaltyHistoryForm(_scopeFactory, customer);
+        using var dialog = new CustomerLoyaltyHistoryForm(_services.GetRequiredService<IServiceScopeFactory>(), customer);
         dialog.ShowDialog(this);
     }
 
-    private async Task ToggleActiveAsync(CustomerDto customer)
-    {
-        if (customer.IsActive
-            && !Confirm($"Ngừng hoạt động khách hàng \"{customer.Name}\"?\nKhách sẽ không còn được tìm thấy khi bán hàng; điểm tích lũy được giữ nguyên.",
-                Caption, "Ngừng hoạt động", "Hủy"))
-        {
-            return;
-        }
+    Task ICustomerListView.ReloadAsync() => RefreshDataAsync();
 
-        using var scope = _scopeFactory.CreateScope();
-        var customers = scope.ServiceProvider.GetRequiredService<ICustomerService>();
-        var result = await (customer.IsActive ? customers.DeactivateAsync(customer.Id) : customers.ActivateAsync(customer.Id));
-        if (!IsAlive)
-        {
-            return;
-        }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-        if (result.IsFailure)
-        {
-            ShowWarning(result.Error.Message, Caption);
-            return;
-        }
+    bool IView.Confirm(string message, string title, string confirmText) => Confirm(message, title, confirmText);
 
-        ToastSuccess(customer.IsActive ? $"Đã ngừng hoạt động khách hàng {customer.Name}." : $"Đã kích hoạt lại khách hàng {customer.Name}.");
-        await RefreshDataAsync();
-    }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

@@ -33,6 +33,8 @@ internal sealed class CategoryEditForm : BaseEditDialog, ICategoryEditView
 
     void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
+    bool IView.Confirm(string message, string title, string confirmText) => Confirm(message, title, confirmText);
+
     void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 
     void IView.ToastError(string message, string? title) => ToastError(message, title);

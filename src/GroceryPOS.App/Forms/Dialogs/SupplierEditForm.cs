@@ -1,24 +1,18 @@
-using FluentValidation;
-using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Partners;
-using GroceryPOS.Application.Validation;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Partners;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Dialogs;
 
-/// <summary>
-/// Add/edit dialog for a supplier. The code is pre-filled with the next <c>NCC0001</c> code on add (it may be
-/// overwritten) and is read-only on edit; the debt balance is shown but only changes through receipts, payments and returns.
-/// </summary>
-internal sealed class SupplierEditForm : BaseEditDialog
+/// <summary>Add/edit dialog for a supplier – passive MVP view of <see cref="SupplierEditPresenter"/>.</summary>
+internal sealed class SupplierEditForm : BaseEditDialog, ISupplierEditView
 {
     private const string CodeKey = "code";
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly SupplierDto? _supplier;
+    private readonly SupplierEditPresenter _presenter;
     private readonly ModernTextBox _code;
     private readonly ModernTextBox _name;
     private readonly ModernTextBox _contactPerson;
@@ -27,16 +21,16 @@ internal sealed class SupplierEditForm : BaseEditDialog
     private readonly ModernTextBox _taxCode;
     private readonly ModernTextBox _address;
 
-    public SupplierEditForm(IServiceScopeFactory scopeFactory, SupplierDto? supplier)
-        : base(supplier is null ? "Thêm nhà cung cấp" : "Sửa nhà cung cấp", columns: 2, contentWidth: 496)
+    public SupplierEditForm(SupplierEditPresenter presenter)
+        : base(presenter.Title, columns: 2, contentWidth: 496)
     {
-        _scopeFactory = scopeFactory;
-        _supplier = supplier;
+        _presenter = presenter;
+        var supplier = presenter.Supplier;
 
         _code = AddField("Mã nhà cung cấp", new ModernTextBox
         {
             Text = supplier?.Code ?? string.Empty,
-            ReadOnly = supplier is not null,
+            ReadOnly = presenter.CodeReadOnly,
             PlaceholderText = "Tự động nếu để trống",
         }, trackAs: CodeKey);
         _taxCode = AddField("Mã số thuế", new ModernTextBox { Text = supplier?.TaxCode ?? string.Empty, PlaceholderText = "0123456789" });
@@ -44,44 +38,64 @@ internal sealed class SupplierEditForm : BaseEditDialog
         _contactPerson = AddField("Người liên hệ", new ModernTextBox { Text = supplier?.ContactPerson ?? string.Empty, PlaceholderText = "Không bắt buộc" });
         _phone = AddField("Số điện thoại", new ModernTextBox { Text = supplier?.Phone ?? string.Empty, PlaceholderText = "09xx xxx xxx", IconGlyph = Glyphs.Phone });
         _email = AddField("Email", new ModernTextBox { Text = supplier?.Email ?? string.Empty, PlaceholderText = "Không bắt buộc" });
-        AddField("Công nợ hiện tại", new ModernCurrencyBox { Value = supplier?.DebtBalance ?? 0, ReadOnly = true, TabStop = false }, track: false);
+        AddField("Công nợ hiện tại", new ModernCurrencyBox { Value = presenter.DebtBalance, ReadOnly = true, TabStop = false }, track: false);
         _address = AddField("Địa chỉ", new ModernTextBox { Text = supplier?.Address ?? string.Empty, PlaceholderText = "Không bắt buộc" }, fullWidth: true);
 
-        if (supplier is null)
+        _presenter.Attach(this);
+        if (presenter.IsNew)
         {
             Load += async (_, _) => await SuggestCodeAsync();
         }
     }
 
+    string ISupplierEditView.Code => _code.Text;
+
+    string ISupplierEditView.SupplierName => _name.Text;
+
+    string ISupplierEditView.ContactPerson => _contactPerson.Text;
+
+    string ISupplierEditView.Phone => _phone.Text;
+
+    string ISupplierEditView.Email => _email.Text;
+
+    string ISupplierEditView.Address => _address.Text;
+
+    string ISupplierEditView.TaxCode => _taxCode.Text;
+
+    bool IView.IsAlive => IsAlive;
+
+    void ISupplierEditView.FocusField(string field)
+    {
+        var box = field switch
+        {
+            nameof(SaveSupplierRequest.Code) => _code,
+            nameof(SaveSupplierRequest.ContactPerson) => _contactPerson,
+            nameof(SaveSupplierRequest.Phone) => _phone,
+            nameof(SaveSupplierRequest.Email) => _email,
+            nameof(SaveSupplierRequest.Address) => _address,
+            nameof(SaveSupplierRequest.TaxCode) => _taxCode,
+            _ => _name,
+        };
+        box.Select();
+    }
+
+    protected override Task<string?> SaveAsync() => _presenter.SaveAsync();
+
     private async Task SuggestCodeAsync()
     {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<ISupplierService>().SuggestCodeAsync();
-        if (IsAlive && result.IsSuccess && string.IsNullOrEmpty(_code.Text))
+        var code = await _presenter.SuggestCodeAsync();
+        if (code is not null && IsAlive && string.IsNullOrEmpty(_code.Text))
         {
-            _code.Text = result.Value;
+            _code.Text = code;
             Changes.AcceptChange(CodeKey); // a suggested code is not an edit by the user
         }
     }
 
-    private static string? Optional(ModernTextBox box) => string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim();
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-    protected override async Task<string?> SaveAsync()
-    {
-        var request = new SaveSupplierRequest(
-            Optional(_code), _name.Text, Optional(_contactPerson), Optional(_phone), Optional(_email), Optional(_address), Optional(_taxCode));
+    bool IView.Confirm(string message, string title, string confirmText) => Confirm(message, title, confirmText);
 
-        using var scope = _scopeFactory.CreateScope();
-        var validator = scope.ServiceProvider.GetRequiredService<IValidator<SaveSupplierRequest>>();
-        if (validator.Check(request) is { IsFailure: true } invalid)
-        {
-            return invalid.ErrorMessageOrNull();
-        }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 
-        var suppliers = scope.ServiceProvider.GetRequiredService<ISupplierService>();
-        var result = _supplier is null
-            ? await suppliers.CreateAsync(request)
-            : await suppliers.UpdateAsync(_supplier.Id, request);
-        return result.ErrorMessageOrNull();
-    }
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

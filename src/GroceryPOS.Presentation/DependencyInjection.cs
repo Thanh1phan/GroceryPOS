@@ -1,4 +1,5 @@
 using GroceryPOS.Presentation.Catalog;
+using GroceryPOS.Presentation.Partners;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.Presentation;
@@ -14,6 +15,10 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         services.AddTransient<CategoryListPresenter>();
         services.AddTransient<CategoryEditPresenter>();
+        services.AddTransient<SupplierListPresenter>();
+        services.AddTransient<SupplierEditPresenter>();
+        services.AddTransient<CustomerListPresenter>();
+        services.AddTransient<CustomerEditPresenter>();
         return services;
     }
 }

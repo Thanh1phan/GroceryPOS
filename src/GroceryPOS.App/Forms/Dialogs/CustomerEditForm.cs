@@ -1,32 +1,26 @@
-using FluentValidation;
-using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Partners;
-using GroceryPOS.Application.Validation;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Partners;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Dialogs;
 
-/// <summary>
-/// Add/edit dialog for a (loyalty) customer. The phone number is how the cashier finds the member at the counter,
-/// so it must be unique. Points and total spent are read-only: only sales, voids and returns change them.
-/// </summary>
-internal sealed class CustomerEditForm : BaseEditDialog
+/// <summary>Add/edit dialog for a (loyalty) customer – passive MVP view of <see cref="CustomerEditPresenter"/>.</summary>
+internal sealed class CustomerEditForm : BaseEditDialog, ICustomerEditView
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly CustomerDto? _customer;
+    private readonly CustomerEditPresenter _presenter;
     private readonly ModernTextBox _name;
     private readonly ModernTextBox _phone;
     private readonly ModernTextBox _email;
     private readonly ModernTextBox _address;
 
-    public CustomerEditForm(IServiceScopeFactory scopeFactory, CustomerDto? customer)
-        : base(customer is null ? "Thêm khách hàng" : $"Sửa khách hàng – {customer.Code}", columns: 2, contentWidth: 496)
+    public CustomerEditForm(CustomerEditPresenter presenter)
+        : base(presenter.Title, columns: 2, contentWidth: 496)
     {
-        _scopeFactory = scopeFactory;
-        _customer = customer;
+        _presenter = presenter;
+        var customer = presenter.Customer;
 
         _name = AddField("Tên khách hàng", new ModernTextBox { Text = customer?.Name ?? string.Empty, PlaceholderText = "Họ và tên" }, fullWidth: true);
         _phone = AddField("Số điện thoại", new ModernTextBox
@@ -39,30 +33,44 @@ internal sealed class CustomerEditForm : BaseEditDialog
         _email = AddField("Email", new ModernTextBox { Text = customer?.Email ?? string.Empty, PlaceholderText = "Không bắt buộc" });
         _address = AddField("Địa chỉ", new ModernTextBox { Text = customer?.Address ?? string.Empty, PlaceholderText = "Không bắt buộc" }, fullWidth: true);
 
-        if (customer is not null)
+        if (presenter.ShowsLoyalty && customer is not null)
         {
             AddField("Điểm tích lũy", new ModernNumericBox { Value = customer.LoyaltyPoints, ReadOnly = true, TabStop = false, SuffixText = "điểm" }, track: false);
             AddField("Tổng chi tiêu", new ModernCurrencyBox { Value = customer.TotalSpent, ReadOnly = true, TabStop = false }, track: false);
         }
+
+        _presenter.Attach(this);
     }
 
-    private static string? Optional(ModernTextBox box) => string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim();
+    string ICustomerEditView.CustomerName => _name.Text;
 
-    protected override async Task<string?> SaveAsync()
+    string ICustomerEditView.Phone => _phone.Text;
+
+    string ICustomerEditView.Email => _email.Text;
+
+    string ICustomerEditView.Address => _address.Text;
+
+    bool IView.IsAlive => IsAlive;
+
+    void ICustomerEditView.FocusField(string field)
     {
-        var request = new SaveCustomerRequest(_name.Text, Optional(_phone), Optional(_email), Optional(_address));
-
-        using var scope = _scopeFactory.CreateScope();
-        var validator = scope.ServiceProvider.GetRequiredService<IValidator<SaveCustomerRequest>>();
-        if (validator.Check(request) is { IsFailure: true } invalid)
+        var box = field switch
         {
-            return invalid.ErrorMessageOrNull();
-        }
-
-        var customers = scope.ServiceProvider.GetRequiredService<ICustomerService>();
-        var result = _customer is null
-            ? await customers.CreateAsync(request)
-            : await customers.UpdateAsync(_customer.Id, request);
-        return result.ErrorMessageOrNull();
+            nameof(SaveCustomerRequest.Phone) => _phone,
+            nameof(SaveCustomerRequest.Email) => _email,
+            nameof(SaveCustomerRequest.Address) => _address,
+            _ => _name,
+        };
+        box.Select();
     }
+
+    protected override Task<string?> SaveAsync() => _presenter.SaveAsync();
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText) => Confirm(message, title, confirmText);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }
