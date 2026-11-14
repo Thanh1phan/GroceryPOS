@@ -60,7 +60,10 @@ internal sealed class SupplierListScreen : BaseListView<SupplierDto>, ISupplierL
 
     void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-    bool IView.Confirm(string message, string title, string confirmText) => Confirm(message, title, confirmText);
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
 
     void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 

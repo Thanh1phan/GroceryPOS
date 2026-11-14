@@ -12,8 +12,14 @@ public interface IView
 
     void ShowWarning(string message, string title);
 
-    /// <summary>Asks a yes/no question; true when the user chose <paramref name="confirmText"/>.</summary>
-    bool Confirm(string message, string title, string confirmText);
+    /// <summary>Shows an information box the user must acknowledge (e.g. a generated temporary password).</summary>
+    void ShowInfo(string message, string title);
+
+    /// <summary>
+    /// Asks a yes/no question; true when the user chose <paramref name="confirmText"/>. <paramref name="danger"/>
+    /// paints the confirm button red (actions that lock someone out or lose money).
+    /// </summary>
+    bool Confirm(string message, string title, string confirmText, bool danger = false);
 
     void ToastSuccess(string message, string? title = null);
 

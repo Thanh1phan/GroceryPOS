@@ -1,8 +1,7 @@
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Users;
 using GroceryPOS.App.Forms.Dialogs;
-using GroceryPOS.Domain.Identity;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Users;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Forms.Core;
 using GroceryPOS.UI.Controls.Icons;
@@ -12,19 +11,20 @@ using Microsoft.Extensions.DependencyInjection;
 namespace GroceryPOS.App.Forms.Screens;
 
 /// <summary>
-/// User accounts (người dùng): add, edit name/role, reset password, unlock, stop/resume. Accounts are never deleted.
-/// Buttons follow <c>users.manage</c>; the service also refuses accounts whose role is above the signed-in user's.
+/// User accounts (người dùng) – passive MVP view; the logic lives in <see cref="UserListPresenter"/>.
+/// Accounts are never deleted, only stopped.
 /// </summary>
-internal sealed class UserListScreen : BaseListView<UserListScreen.UserRow>
+internal sealed class UserListScreen : BaseListView<UserListScreen.UserRow>, IUserListView
 {
-    private const string Caption = "Người dùng";
+    private readonly IServiceProvider _services;
+    private readonly UserListPresenter _presenter;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-
-    public UserListScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public UserListScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        var canManage = currentUser.HasPermission(Permissions.UsersManage);
+        _services = services;
+        _presenter = services.GetRequiredService<UserListPresenter>();
+        _presenter.Attach(this);
+        var canManage = _presenter.CanManage;
 
         Grid.EmptyText = "Chưa có người dùng nào.";
         Grid.AddTextColumn(nameof(UserRow.Username), "Tên đăng nhập", width: 150);
@@ -33,101 +33,62 @@ internal sealed class UserListScreen : BaseListView<UserListScreen.UserRow>
         Grid.AddTextColumn(nameof(UserRow.Status), "Trạng thái", width: 150);
         Grid.AddDateColumn(nameof(UserRow.LastLogin), "Đăng nhập gần nhất", width: 160, withTime: true, searchable: false);
 
-        AddCommand(new ListCommand<UserRow>("Thêm người dùng") { Allowed = canManage }, () => Open(null), ButtonVariant.Primary, Glyphs.Add);
-        AddCommand(new ListCommand<UserRow>("Sửa") { Allowed = canManage }, row => Open(row.User), iconGlyph: Glyphs.Edit, isDefault: true);
+        AddCommand(new ListCommand<UserRow>("Thêm người dùng") { Allowed = canManage }, _presenter.AddAsync, ButtonVariant.Primary, Glyphs.Add);
+        AddCommand(new ListCommand<UserRow>("Sửa") { Allowed = canManage }, row => _presenter.EditAsync(row.User), iconGlyph: Glyphs.Edit, isDefault: true);
         AddCommand(
-            new ListCommand<UserRow>("Đặt lại mật khẩu") { Allowed = canManage, EnabledWhen = r => !r.User.IsCurrentUser },
-            row => ResetPassword(row.User),
+            new ListCommand<UserRow>("Đặt lại mật khẩu") { Allowed = canManage, EnabledWhen = r => UserListPresenter.CanActOn(r.User) },
+            row => _presenter.ResetPasswordAsync(row.User),
             iconGlyph: Glyphs.Lock);
         AddCommand(
-            new ListCommand<UserRow>("Mở khóa") { Allowed = canManage, EnabledWhen = r => r.User.IsLockedOut },
-            row => RunAsync(s => s.UnlockAsync(row.User.Id), $"Đã mở khóa tài khoản {row.User.Username}."));
+            new ListCommand<UserRow>("Mở khóa") { Allowed = canManage, EnabledWhen = r => UserListPresenter.CanUnlock(r.User) },
+            row => _presenter.UnlockAsync(row.User));
         AddCommand(
             new ListCommand<UserRow>("Ngừng hoạt động")
             {
                 Allowed = canManage,
-                EnabledWhen = r => !r.User.IsCurrentUser,
-                TextFor = r => r.User.IsActive ? "Ngừng hoạt động" : "Kích hoạt lại",
+                EnabledWhen = r => UserListPresenter.CanActOn(r.User),
+                TextFor = r => UserListPresenter.ToggleText(r.User),
             },
-            row => ToggleActiveAsync(row.User));
+            row => _presenter.ToggleActiveAsync(row.User));
     }
+
+    bool IView.IsAlive => IsAlive;
 
     protected override object? KeyOf(UserRow item) => item.User.Id;
 
-    protected override async Task<IReadOnlyList<UserRow>?> LoadItemsAsync(CancellationToken cancellationToken)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IUserManagementService>().ListAsync(cancellationToken);
-        if (result.IsFailure)
-        {
-            ToastError(result.Error.Message, Caption);
-            return null;
-        }
+    protected override async Task<IReadOnlyList<UserRow>?> LoadItemsAsync(CancellationToken cancellationToken) =>
+        (await _presenter.LoadAsync(cancellationToken))?.Select(u => new UserRow(u)).ToList();
 
-        return result.Value.Select(u => new UserRow(u)).ToList();
+    bool IUserListView.OpenEditor(UserDto? user)
+    {
+        using var dialog = new UserEditForm(_services.GetRequiredService<UserEditPresenter>().For(user));
+        return dialog.ShowDialog(this) == DialogResult.OK;
     }
 
-    private void Open(UserDto? user)
+    bool IUserListView.OpenResetPassword(UserDto user)
     {
-        using var dialog = new UserEditForm(_scopeFactory, user);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            if (user is not null)
-            {
-                ToastSuccess($"Đã lưu tài khoản {user.Username}.");
-            }
-
-            RequestRefresh();
-        }
+        using var dialog = new ResetPasswordForm(_services.GetRequiredService<ResetPasswordPresenter>().For(user));
+        return dialog.ShowDialog(this) == DialogResult.OK;
     }
 
-    private void ResetPassword(UserDto user)
-    {
-        using var dialog = new ResetPasswordForm(_scopeFactory, user);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            RequestRefresh();
-        }
-    }
+    Task IUserListView.ReloadAsync() => RefreshDataAsync();
 
-    private async Task ToggleActiveAsync(UserDto user)
-    {
-        if (user.IsActive
-            && !Confirm($"Ngừng hoạt động tài khoản \"{user.Username}\" ({user.FullName})?\nNgười này sẽ không đăng nhập được nữa.",
-                Caption, "Ngừng hoạt động", "Hủy", danger: true))
-        {
-            return;
-        }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-        await RunAsync(
-            s => user.IsActive ? s.DeactivateAsync(user.Id) : s.ActivateAsync(user.Id),
-            user.IsActive ? $"Đã ngừng hoạt động tài khoản {user.Username}." : $"Đã kích hoạt lại tài khoản {user.Username}.");
-    }
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
 
-    private async Task RunAsync(Func<IUserManagementService, Task<Result>> action, string successMessage)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await action(scope.ServiceProvider.GetRequiredService<IUserManagementService>());
-        if (!IsAlive)
-        {
-            return;
-        }
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
 
-        if (result.IsFailure)
-        {
-            ShowWarning(result.Error.Message, Caption);
-            return;
-        }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 
-        ToastSuccess(successMessage);
-        await RefreshDataAsync();
-    }
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 
     /// <summary>Grid row: the DTO plus the last sign-in in local (store) time.</summary>
     internal sealed record UserRow(UserDto User)
     {
         public string Username => User.Username;
-        public string FullName => User.IsCurrentUser ? $"{User.FullName} (bạn)" : User.FullName;
+        public string FullName => UserListPresenter.DisplayName(User);
         public string RoleName => User.RoleName;
         public string Status => User.Status;
         public DateTime? LastLogin => User.LastLoginAt?.LocalDateTime;

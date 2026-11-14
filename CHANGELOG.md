@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-14
+- **Sản phẩm** moved to MVP: `Presentation.Catalog.ProductListPresenter` (permission, edit from fresh details with reload when the product vanished, stop/resume selling, price history, Excel export and import – file picking, the loading overlay and saving stay in the view through `IProductListView`) and `ProductEditPresenter` (category list incl. a stopped current category, VAT options, live margin, loss-price confirmation only when a price was actually changed, "Đang bán" applied after saving).
+- **Người dùng** moved to MVP: `Presentation.Users.UserListPresenter` (add/edit/reset/unlock/stop-resume, own account protected), `UserEditPresenter` (assignable roles + current role, own role locked, temporary password shown once) and `ResetPasswordPresenter`; `UserListScreen`, `UserEditForm`, `ResetPasswordForm`, `ProductListScreen` and `ProductEditForm` are now passive views resolved through DI.
+- `IView` gains `ShowInfo` and a `danger` flag on `Confirm`, so presenters keep the red button for risky actions (stopping an account, saving a selling price at or below cost).
+- Improvements: a failed save in the product and user dialogs now focuses the offending field (Mã, Tên, Đơn vị tính, Danh mục, Tên đăng nhập, Mật khẩu…); product code, name and unit are trimmed before saving; the presenter refuses resetting or stopping your own account even if the button state is bypassed.
+- 46 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 427, Presentation 116 – all passing).
+
 ## 2026-11-13
 - **Nhà cung cấp** and **Khách hàng** moved to MVP: new `Presentation.Partners` presenters (`SupplierListPresenter`, `SupplierEditPresenter`, `CustomerListPresenter`, `CustomerEditPresenter`) hold permissions, confirmations, toasts and validation; `SupplierListScreen`, `CustomerListScreen` and their edit dialogs are now passive views resolved through DI.
 - `IView.Confirm` lets presenters ask yes/no questions (stop trading, deactivate a customer); new `Mvp.FormInput` with `Optional` (trim, blank → null) and `FirstError` (first failing property + message).

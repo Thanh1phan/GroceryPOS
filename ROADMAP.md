@@ -27,7 +27,8 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Role management (`RoleService`: custom roles, system names fixed, Admin locked, delete only unused roles) and permission matrix screen (Phân quyền: grouped rows, tri-state group toggles, highlighted unsaved changes)
 - [x] MVP foundation: `GroceryPOS.Presentation` (`Presenter<TView>`, `IView`, `AddPresentation()`), presenter tests project; Danh mục list + edit dialog migrated as the reference
 - [x] Migrate suppliers and customers to MVP (`Partners.SupplierListPresenter`/`SupplierEditPresenter`, `CustomerListPresenter`/`CustomerEditPresenter`; `IView.Confirm`, `FormInput` helpers, first invalid field focused)
-- [ ] Migrate the remaining master-data screens to MVP (products, users, roles)
+- [x] Migrate products and users to MVP (`Catalog.ProductListPresenter`/`ProductEditPresenter` incl. Excel import/export and loss-price confirmation; `Users.UserListPresenter`/`UserEditPresenter`/`ResetPasswordPresenter`; `IView.ShowInfo`, red `Confirm(danger)`)
+- [ ] Migrate roles (Phân quyền matrix + role dialog) to MVP
 - [ ] Migrate the operational screens to MVP (inventory, purchasing, supplier debt, shifts, settings, backup, audit log, reports, dashboard; POS and returns last)
 - [x] Global exception handling + Serilog wiring in WinForms host (synchronous STA `Main`)
 

@@ -1,36 +1,22 @@
-using FluentValidation;
-using GroceryPOS.App.Forms.Shared;
-using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
-using GroceryPOS.Application.Validation;
-using GroceryPOS.Domain.Catalog;
-using GroceryPOS.Domain.Identity;
+using GroceryPOS.Presentation.Catalog;
+using GroceryPOS.Presentation.Mvp;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Theming;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Dialogs;
 
 /// <summary>
-/// Add/edit dialog for a product. Stock quantity is shown read-only: it is owned by the warehouse/inventory
-/// ledger and can only change through goods receipt, manual adjustment, stock count or a sale. The gross margin
-/// per unit is shown live under the selling price; saving a price at or below cost asks for confirmation.
+/// Add/edit dialog for a product – passive MVP view of <see cref="ProductEditPresenter"/>. Stock quantity is shown
+/// read-only; the gross margin per unit is shown live under the selling price.
 /// </summary>
-internal sealed class ProductEditForm : BaseEditDialog
+internal sealed class ProductEditForm : BaseEditDialog, IProductEditView
 {
     private const string CategoryKey = "category";
-    private const string CostKey = "cost";
-    private const string SellKey = "sell";
 
-    private sealed record VatOption(decimal Rate)
-    {
-        public override string ToString() => Rate == 0 ? "Không chịu thuế" : $"{Rate}%";
-    }
-
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ProductDetail? _product;
+    private readonly ProductEditPresenter _presenter;
     private readonly ModernTextBox _code;
     private readonly ModernTextBox _barcode;
     private readonly ModernTextBox _name;
@@ -42,14 +28,14 @@ internal sealed class ProductEditForm : BaseEditDialog
     private readonly ModernNumericBox _minStockLevel;
     private readonly CheckBox _isActive;
 
-    public ProductEditForm(IServiceScopeFactory scopeFactory, ICurrentUser currentUser, ProductDetail? product)
-        : base(product is null ? "Thêm sản phẩm" : $"Sửa sản phẩm – {product.Code}", columns: 2, contentWidth: 496)
+    public ProductEditForm(ProductEditPresenter presenter)
+        : base(presenter.Title, columns: 2, contentWidth: 496)
     {
-        _scopeFactory = scopeFactory;
-        _product = product;
-        var canChangePrice = currentUser.HasPermission(Permissions.PricesChange);
+        _presenter = presenter;
+        var product = presenter.Product;
+        var canChangePrice = presenter.CanChangePrice;
 
-        _code = AddField("Mã sản phẩm", new ModernTextBox { Text = product?.Code ?? string.Empty, ReadOnly = product is not null, PlaceholderText = "vd: SUA01" });
+        _code = AddField("Mã sản phẩm", new ModernTextBox { Text = product?.Code ?? string.Empty, ReadOnly = !presenter.IsNew, PlaceholderText = "vd: SUA01" });
         _barcode = AddField("Mã vạch", new ModernTextBox { Text = product?.Barcode ?? string.Empty, PlaceholderText = "Quét hoặc nhập – không bắt buộc", IconGlyph = Glyphs.Barcode });
         _name = AddField("Tên sản phẩm", new ModernTextBox { Text = product?.Name ?? string.Empty, PlaceholderText = "vd: Sữa tươi Vinamilk 180ml" }, fullWidth: true);
         _category = AddField("Danh mục", new ModernComboBox { DisplayMember = nameof(CategoryDto.Name), ValueMember = nameof(CategoryDto.Id) }, trackAs: CategoryKey);
@@ -58,13 +44,13 @@ internal sealed class ProductEditForm : BaseEditDialog
         {
             Value = product?.CostPrice ?? 0,
             ReadOnly = !canChangePrice,
-            HelperText = canChangePrice ? "Tự cập nhật theo bình quân khi nhập hàng." : "Bạn không có quyền thay đổi giá.",
-        }, trackAs: CostKey);
-        _sellPrice = AddField("Giá bán", new ModernCurrencyBox { Value = product?.SellPrice ?? 0, ReadOnly = !canChangePrice }, trackAs: SellKey);
+            HelperText = presenter.CostHelperText,
+        });
+        _sellPrice = AddField("Giá bán", new ModernCurrencyBox { Value = product?.SellPrice ?? 0, ReadOnly = !canChangePrice });
 
         _vatRate = AddField("Thuế VAT", new ModernComboBox());
-        _vatRate.Items.AddRange(VatRate.Allowed.Select(r => new VatOption(r)).Cast<object>().ToArray());
-        _vatRate.SelectedItem = _vatRate.Items.Cast<VatOption>().FirstOrDefault(o => o.Rate == (product?.VatRate ?? VatRate.None));
+        _vatRate.Items.AddRange(ProductEditPresenter.VatOptions.Cast<object>().ToArray());
+        _vatRate.SelectedItem = presenter.InitialVat;
         _minStockLevel = AddField("Mức tồn tối thiểu", new ModernNumericBox
         {
             DecimalPlaces = 3,
@@ -86,15 +72,36 @@ internal sealed class ProductEditForm : BaseEditDialog
         _sellPrice.ValueChanged += (_, _) => ShowMargin();
         ShowMargin();
 
-        Load += async (_, _) => await LoadCategoriesAsync();
+        _presenter.Attach(this);
+        Load += async (_, _) => ShowFormError(await _presenter.LoadCategoriesAsync());
     }
 
-    private PriceMargin CurrentMargin => PriceMargin.Of(_costPrice.ValueOrZero, _sellPrice.ValueOrZero);
+    string IProductEditView.Code => _code.Text;
+
+    string IProductEditView.Barcode => _barcode.Text;
+
+    string IProductEditView.ProductName => _name.Text;
+
+    int? IProductEditView.CategoryId => _category.SelectedValue is int id ? id : null;
+
+    string IProductEditView.Unit => _unit.Text;
+
+    decimal IProductEditView.CostPrice => _costPrice.ValueOrZero;
+
+    decimal IProductEditView.SellPrice => _sellPrice.ValueOrZero;
+
+    decimal? IProductEditView.VatRate => (_vatRate.SelectedItem as VatOption)?.Rate;
+
+    decimal IProductEditView.MinStockLevel => _minStockLevel.ValueOrZero;
+
+    bool IProductEditView.IsActive => _isActive.Checked;
+
+    bool IView.IsAlive => IsAlive;
 
     /// <summary>Live gross margin under the selling price: amber for thin margins, red when selling at a loss.</summary>
     private void ShowMargin()
     {
-        var margin = CurrentMargin;
+        var margin = ProductEditPresenter.Margin(_costPrice.ValueOrZero, _sellPrice.ValueOrZero);
         _sellPrice.HelperText = margin.Text;
         _sellPrice.ValidationState = margin.Tone switch
         {
@@ -105,85 +112,40 @@ internal sealed class ProductEditForm : BaseEditDialog
         _sellPrice.ValidationMessage = margin.Tone is PriceMarginTone.Loss or PriceMarginTone.Thin ? margin.Text : null;
     }
 
-    private async Task LoadCategoriesAsync()
+    void IProductEditView.ShowCategories(IReadOnlyList<CategoryDto> categories, int? selectedCategoryId)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<ICategoryService>().ListAsync();
-        if (!IsAlive)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ShowFormError(result.Error.Message);
-            return;
-        }
-
-        _category.DataSource = result.Value.Where(c => c.IsActive || c.Id == _product?.CategoryId).ToList();
-        _category.SelectedValue = _product?.CategoryId;
+        _category.DataSource = categories.ToList();
+        _category.SelectedValue = selectedCategoryId;
         Changes.AcceptChange(CategoryKey); // filling the list is not an edit by the user
     }
 
-    protected override async Task<string?> SaveAsync()
+    void IProductEditView.FocusField(string field)
     {
-        if (_category.SelectedValue is not int categoryId)
+        Control target = field switch
         {
-            _category.Select();
-            return "Vui lòng chọn danh mục.";
-        }
-
-        if (_vatRate.SelectedItem is not VatOption vat)
-        {
-            return "Vui lòng chọn thuế VAT.";
-        }
-
-        var pricesTouched = _product is null || Changes.IsChanged(CostKey) || Changes.IsChanged(SellKey);
-        if (pricesTouched
-            && _sellPrice.ValueOrZero > 0
-            && CurrentMargin.Tone == PriceMarginTone.Loss
-            && !Confirm($"{CurrentMargin.Text}\nVẫn lưu giá bán này?", Text, "Vẫn lưu", "Sửa lại giá", danger: true))
-        {
-            _sellPrice.Select();
-            return string.Empty;
-        }
-
-        var request = new SaveProductRequest(
-            _code.Text,
-            string.IsNullOrWhiteSpace(_barcode.Text) ? null : _barcode.Text,
-            _name.Text,
-            categoryId,
-            _unit.Text,
-            _costPrice.ValueOrZero,
-            _sellPrice.ValueOrZero,
-            vat.Rate,
-            _minStockLevel.ValueOrZero);
-
-        using var scope = _scopeFactory.CreateScope();
-        var validator = scope.ServiceProvider.GetRequiredService<IValidator<SaveProductRequest>>();
-        if (validator.Check(request) is { IsFailure: true } invalid)
-        {
-            return invalid.ErrorMessageOrNull();
-        }
-
-        var products = scope.ServiceProvider.GetRequiredService<IProductService>();
-        var saved = _product is null
-            ? await products.CreateAsync(request)
-            : await products.UpdateAsync(_product.Id, request);
-        if (saved.IsFailure)
-        {
-            return saved.Error.Message;
-        }
-
-        if (saved.Value.IsActive != _isActive.Checked)
-        {
-            var status = await products.SetActiveAsync(saved.Value.Id, _isActive.Checked);
-            if (status.IsFailure)
-            {
-                return status.Error.Message;
-            }
-        }
-
-        return null;
+            nameof(SaveProductRequest.Code) => _code,
+            nameof(SaveProductRequest.Barcode) => _barcode,
+            nameof(SaveProductRequest.CategoryId) => _category,
+            nameof(SaveProductRequest.Unit) => _unit,
+            nameof(SaveProductRequest.CostPrice) => _costPrice,
+            nameof(SaveProductRequest.SellPrice) => _sellPrice,
+            nameof(SaveProductRequest.VatRate) => _vatRate,
+            nameof(SaveProductRequest.MinStockLevel) => _minStockLevel,
+            _ => _name,
+        };
+        target.Select();
     }
+
+    protected override Task<string?> SaveAsync() => _presenter.SaveAsync();
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

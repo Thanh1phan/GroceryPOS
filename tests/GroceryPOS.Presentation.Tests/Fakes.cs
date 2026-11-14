@@ -3,6 +3,7 @@ using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Partners;
+using GroceryPOS.Application.Users;
 using GroceryPOS.Application.Validation;
 using GroceryPOS.Presentation;
 using GroceryPOS.Presentation.Mvp;
@@ -24,6 +25,10 @@ internal abstract class RecordingView : IView
     public List<string> Successes { get; } = new();
     public List<string> Errors { get; } = new();
     public List<string> Questions { get; } = new();
+    public List<string> Infos { get; } = new();
+
+    /// <summary>Questions asked with the red (danger) confirm button.</summary>
+    public List<string> DangerQuestions { get; } = new();
     public bool IsAlive { get; set; } = true;
 
     /// <summary>What the user answers to <see cref="Confirm"/>.</summary>
@@ -31,9 +36,16 @@ internal abstract class RecordingView : IView
 
     public void ShowWarning(string message, string title) => Warnings.Add(message);
 
-    public bool Confirm(string message, string title, string confirmText)
+    public void ShowInfo(string message, string title) => Infos.Add(message);
+
+    public bool Confirm(string message, string title, string confirmText, bool danger = false)
     {
         Questions.Add(message);
+        if (danger)
+        {
+            DangerQuestions.Add(message);
+        }
+
         return ConfirmAnswer;
     }
 
@@ -198,6 +210,15 @@ internal sealed class TestHost : IDisposable
         services.AddSingleton(Customers);
         services.AddScoped<ICustomerService>(sp => sp.GetRequiredService<FakeCustomerService>());
         services.AddTransient<IValidator<SaveCustomerRequest>, SaveCustomerRequestValidator>();
+        services.AddSingleton(Users);
+        services.AddScoped<IUserManagementService>(sp => sp.GetRequiredService<FakeUserManagementService>());
+        services.AddTransient<IValidator<CreateUserRequest>, CreateUserRequestValidator>();
+        services.AddTransient<IValidator<UpdateUserRequest>, UpdateUserRequestValidator>();
+        services.AddTransient<IValidator<ResetPasswordRequest>, ResetPasswordRequestValidator>();
+        services.AddSingleton(Products);
+        services.AddScoped<IProductService>(sp => sp.GetRequiredService<FakeProductService>());
+        services.AddScoped<IProductImportExportAppService>(sp => sp.GetRequiredService<FakeProductService>());
+        services.AddTransient<IValidator<SaveProductRequest>, SaveProductRequestValidator>();
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
@@ -207,6 +228,10 @@ internal sealed class TestHost : IDisposable
     public FakeSupplierService Suppliers { get; } = new();
 
     public FakeCustomerService Customers { get; } = new();
+
+    public FakeUserManagementService Users { get; } = new();
+
+    public FakeProductService Products { get; } = new();
 
     public ServiceProvider Provider { get; }
 
