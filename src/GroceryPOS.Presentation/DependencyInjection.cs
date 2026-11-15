@@ -25,6 +25,8 @@ public static class DependencyInjection
         services.AddTransient<UserListPresenter>();
         services.AddTransient<UserEditPresenter>();
         services.AddTransient<ResetPasswordPresenter>();
+        services.AddTransient<RolePermissionPresenter>();
+        services.AddTransient<RoleEditPresenter>();
         return services;
     }
 }

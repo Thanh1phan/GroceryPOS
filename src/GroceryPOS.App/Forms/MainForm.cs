@@ -9,6 +9,7 @@ using GroceryPOS.App.Forms.Screens;
 using GroceryPOS.App.Forms.Settings;
 using GroceryPOS.App.Forms.Shifts;
 using GroceryPOS.Domain.Identity;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Navigation;
 using GroceryPOS.UI.Controls.Navigation.Core;
@@ -65,6 +66,7 @@ public sealed class MainForm : Form
     private readonly SidebarNav _sidebar;
     private readonly TopBar _topBar;
     private readonly Panel _content;
+    private bool _leaveConfirmed;
 
     public MainForm(IServiceProvider services, ICurrentUser currentUser)
     {
@@ -83,6 +85,7 @@ public sealed class MainForm : Form
             PermissionFilter = _currentUser.HasPermission,
             Menu = Menu,
         };
+        _sidebar.ItemSelecting += (_, e) => e.Cancel = !CanLeaveScreen();
         _sidebar.ItemSelected += (_, e) => ShowScreen(e.Item.Key, e.Item.Text);
 
         _topBar = new TopBar
@@ -139,6 +142,12 @@ public sealed class MainForm : Form
 
     private async Task SignOutAsync()
     {
+        if (!CanLeaveScreen())
+        {
+            return;
+        }
+
+        _leaveConfirmed = true;
         using var scope = _scopeFactory.CreateScope();
         var auth = scope.ServiceProvider.GetRequiredService<IAuthService>();
         await auth.LogoutAsync();
@@ -146,10 +155,43 @@ public sealed class MainForm : Form
         Close();
     }
 
+    /// <summary>
+    /// Asks the open screen whether it may go away (e.g. unsaved permission changes); closing the window asks too.
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!_leaveConfirmed && e.CloseReason is CloseReason.UserClosing && !CanLeaveScreen())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnFormClosing(e);
+    }
+
+    private bool CanLeaveScreen() => _content.Controls.Count == 0 || _content.Controls[0] is not BaseUserControl screen || screen.CanLeave();
+
     private void ShowScreen(string key, string title)
     {
         _topBar.SetPage(title);
+
+        // Dispose the previous screen: it unsubscribes from theme changes and stops its pending work
+        // (screens check IsAlive after every await). Controls.Clear alone would keep it alive. Disposal is posted
+        // so a screen that navigated from its own click handler (dashboard shortcuts) finishes that handler first.
+        var previous = _content.Controls.Cast<Control>().ToList();
         _content.Controls.Clear();
+        foreach (var old in previous)
+        {
+            if (IsHandleCreated)
+            {
+                BeginInvoke(old.Dispose);
+            }
+            else
+            {
+                old.Dispose();
+            }
+        }
+
         Control screen = key switch
         {
             "dashboard" => new DashboardScreen(_scopeFactory, _currentUser, Navigate),
@@ -163,7 +205,7 @@ public sealed class MainForm : Form
             "suppliers" => new SupplierListScreen(_services),
             "supplier-debt" => new SupplierDebtScreen(_scopeFactory, _currentUser),
             "users" => new UserListScreen(_services),
-            "roles" => new RolePermissionScreen(_scopeFactory),
+            "roles" => new RolePermissionScreen(_services),
             "shifts" => new ShiftScreen(_scopeFactory, _currentUser),
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),

@@ -13,7 +13,7 @@ namespace GroceryPOS.Presentation.Tests;
 
 internal sealed class FakeCurrentUser(params string[] permissions) : ICurrentUser
 {
-    public UserSession? Session => null;
+    public UserSession? Session { get; set; }
 
     public bool HasPermission(string permission) => permissions.Contains(permission);
 }
@@ -200,7 +200,8 @@ internal sealed class TestHost : IDisposable
     public TestHost(params string[] permissions)
     {
         var services = new ServiceCollection();
-        services.AddSingleton<ICurrentUser>(new FakeCurrentUser(permissions));
+        CurrentUser = new FakeCurrentUser(permissions);
+        services.AddSingleton<ICurrentUser>(CurrentUser);
         services.AddSingleton(Categories);
         services.AddScoped<ICategoryService>(sp => sp.GetRequiredService<FakeCategoryService>());
         services.AddTransient<IValidator<SaveCategoryRequest>, SaveCategoryRequestValidator>();
@@ -219,11 +220,18 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IProductService>(sp => sp.GetRequiredService<FakeProductService>());
         services.AddScoped<IProductImportExportAppService>(sp => sp.GetRequiredService<FakeProductService>());
         services.AddTransient<IValidator<SaveProductRequest>, SaveProductRequestValidator>();
+        services.AddSingleton(Roles);
+        services.AddScoped<IRoleService>(sp => sp.GetRequiredService<FakeRoleService>());
+        services.AddTransient<IValidator<SaveRoleRequest>, SaveRoleRequestValidator>();
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
 
+    public FakeCurrentUser CurrentUser { get; }
+
     public FakeCategoryService Categories { get; } = new();
+
+    public FakeRoleService Roles { get; } = new();
 
     public FakeSupplierService Suppliers { get; } = new();
 

@@ -1,7 +1,9 @@
 using GroceryPOS.Application.Users;
 using GroceryPOS.App.Forms.Dialogs;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Users;
 using GroceryPOS.UI.Controls.Buttons;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids.Core;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,14 +13,14 @@ namespace GroceryPOS.App.Forms.Screens;
 /// <summary>
 /// Roles & permissions (vai trò & phân quyền) as a matrix: one row per permission grouped by area, one checkbox column
 /// per role. Clicking a group row toggles the whole group. Changes are highlighted until "Lưu thay đổi" saves them all
-/// at once; they apply at each user's next sign-in. The Admin column is read-only. Requires <c>roles.manage</c>.
+/// at once; they apply at each user's next sign-in. Passive MVP view – the logic lives in <see cref="RolePermissionPresenter"/>.
 /// </summary>
-internal sealed class RolePermissionScreen : UserControl
+internal sealed class RolePermissionScreen : BaseUserControl, IRolePermissionView
 {
-    private const string Caption = "Vai trò & phân quyền";
     private const int FirstRoleColumn = 1;
 
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _services;
+    private readonly RolePermissionPresenter _presenter;
     private readonly DataGridView _grid;
     private readonly ModernButton _editRole;
     private readonly ModernButton _deleteRole;
@@ -26,33 +28,48 @@ internal sealed class RolePermissionScreen : UserControl
     private readonly ModernButton _undo;
     private readonly Label _status;
     private PermissionMatrix? _matrix;
+    private bool _statusEmphasis;
 
-    public RolePermissionScreen(IServiceScopeFactory scopeFactory)
+    public RolePermissionScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        Dock = DockStyle.Fill;
+        _services = services;
+        _presenter = services.GetRequiredService<RolePermissionPresenter>();
+        _presenter.Attach(this);
         Padding = new Padding(16);
 
-        var addRole = new ModernButton { Text = "Thêm vai trò", Variant = ButtonVariant.Primary, Width = 130 };
-        addRole.Click += (_, _) => OpenRole(null);
+        var addRole = new ModernButton { Text = "Thêm vai trò", Variant = ButtonVariant.Primary, Width = 130, Enabled = _presenter.CanManage };
+        addRole.Click += async (_, _) => await _presenter.AddRoleAsync();
         _editRole = new ModernButton { Text = "Sửa vai trò", Variant = ButtonVariant.Secondary, Width = 130, Enabled = false };
-        _editRole.Click += (_, _) => OpenRole(SelectedRole);
-        _deleteRole = new ModernButton { Text = "Xóa vai trò", Variant = ButtonVariant.Danger, Width = 130, Enabled = false };
-        _deleteRole.Click += async (_, _) => await DeleteRoleAsync();
-        _save = new ModernButton { Text = "Lưu thay đổi", Variant = ButtonVariant.Primary, Width = 130, Enabled = false };
-        _save.Click += async (_, _) => await SaveAsync();
-        _undo = new ModernButton { Text = "Hoàn tác", Variant = ButtonVariant.Ghost, Width = 130, Enabled = false };
-        _undo.Click += (_, _) =>
+        _editRole.Click += async (_, _) =>
         {
-            _matrix?.Reset();
-            RefreshCells();
+            if (SelectedRole is { } role)
+            {
+                await _presenter.EditRoleAsync(role);
+            }
         };
+        _deleteRole = new ModernButton { Text = "Xóa vai trò", Variant = ButtonVariant.Danger, Width = 130, Enabled = false };
+        _deleteRole.Click += async (_, _) =>
+        {
+            if (SelectedRole is { } role)
+            {
+                await _presenter.DeleteRoleAsync(role);
+            }
+        };
+        _save = new ModernButton { Text = "Lưu thay đổi", Variant = ButtonVariant.Primary, Width = 130, Enabled = false };
+        _save.Click += async (_, _) =>
+        {
+            _save.Enabled = false;
+            await _presenter.SaveAsync();
+            UpdateToolbarState();
+        };
+        _undo = new ModernButton { Text = "Hoàn tác", Variant = ButtonVariant.Ghost, Width = 130, Enabled = false };
+        _undo.Click += (_, _) => _presenter.Undo();
 
         _status = new Label
         {
             AutoSize = true,
             Margin = new Padding(16, 12, 0, 0),
-            Text = "Chọn một cột để sửa vai trò. Bấm vào dòng nhóm để bật/tắt cả nhóm.",
+            Text = RolePermissionPresenter.IdleHint,
         };
 
         var toolbar = new FlowLayoutPanel
@@ -99,12 +116,61 @@ internal sealed class RolePermissionScreen : UserControl
 
         ThemeManager.ThemeChanged += OnThemeChanged;
         Disposed += (_, _) => ThemeManager.ThemeChanged -= OnThemeChanged;
-        Load += async (_, _) =>
-        {
-            ApplyGridTheme(ThemeManager.Current);
-            await ReloadAsync();
-        };
+        ApplyGridTheme(ThemeManager.Current);
     }
+
+    int? IRolePermissionView.SelectedRoleId => SelectedRole?.Id;
+
+    bool IView.IsAlive => IsAlive;
+
+    /// <summary>F5 reloads, but asks first when there are unsaved changes.</summary>
+    public override async Task RefreshDataAsync()
+    {
+        if (_presenter.ConfirmLeave())
+        {
+            await _presenter.LoadAsync();
+        }
+    }
+
+    public override bool CanLeave() => _presenter.ConfirmLeave();
+
+    void IRolePermissionView.ShowMatrix(PermissionMatrix matrix, int? selectRoleId)
+    {
+        _matrix = matrix;
+        BuildGrid();
+        if (selectRoleId is { } id && _grid.Columns.Cast<DataGridViewColumn>().FirstOrDefault(c => (c.Tag as RoleDto)?.Id == id) is { } column)
+        {
+            SelectColumn(column.Index);
+        }
+
+        UpdateToolbarState();
+    }
+
+    void IRolePermissionView.RefreshMatrix() => RefreshCells();
+
+    void IRolePermissionView.ShowStatus(string text, bool emphasis)
+    {
+        _status.Text = text;
+        _statusEmphasis = emphasis;
+        ApplyStatusColor(ThemeManager.Current);
+    }
+
+    bool IRolePermissionView.OpenRoleEditor(RoleDto? role, IReadOnlyList<RoleDto> roles)
+    {
+        using var dialog = new RoleEditForm(_services.GetRequiredService<RoleEditPresenter>().For(role, roles));
+        return dialog.ShowDialog(this) == DialogResult.OK;
+    }
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 
     private RoleDto? SelectedRole =>
         _grid.CurrentCell is { ColumnIndex: >= FirstRoleColumn } cell ? _grid.Columns[cell.ColumnIndex].Tag as RoleDto : null;
@@ -113,7 +179,11 @@ internal sealed class RolePermissionScreen : UserControl
     {
         ApplyGridTheme(e.Current);
         RefreshCells();
+        ApplyStatusColor(e.Current);
     }
+
+    private void ApplyStatusColor(Theme theme) =>
+        _status.ForeColor = _statusEmphasis ? theme.Colors.TextPrimary : theme.Colors.TextSecondary;
 
     private void ApplyGridTheme(Theme theme)
     {
@@ -131,33 +201,6 @@ internal sealed class RolePermissionScreen : UserControl
         _grid.ColumnHeadersDefaultCellStyle.Font = ThemeFonts.Get(FontRole.Body, FontStyle.Bold);
         _grid.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
         _grid.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
-    }
-
-    private async Task ReloadAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var roles = scope.ServiceProvider.GetRequiredService<IRoleService>();
-        var result = await roles.ListAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        var selectedRoleId = SelectedRole?.Id;
-        _matrix = new PermissionMatrix(roles.GetPermissionCatalog(), result.Value);
-        BuildGrid();
-        if (selectedRoleId is { } id && _grid.Columns.Cast<DataGridViewColumn>().FirstOrDefault(c => (c.Tag as RoleDto)?.Id == id) is { } column)
-        {
-            SelectColumn(column.Index);
-        }
-
-        UpdateToolbarState();
     }
 
     private void BuildGrid()
@@ -179,10 +222,8 @@ internal sealed class RolePermissionScreen : UserControl
         {
             _grid.Columns.Add(new DataGridViewCheckBoxColumn
             {
-                HeaderText = $"{role.Name}\n{role.UserCount} người dùng",
-                ToolTipText = role.PermissionsLocked
-                    ? "Admin luôn có toàn bộ quyền."
-                    : role.Description ?? role.Name,
+                HeaderText = RolePermissionPresenter.HeaderText(role),
+                ToolTipText = RolePermissionPresenter.HeaderToolTip(role),
                 Tag = role,
                 Width = 128,
                 SortMode = DataGridViewColumnSortMode.NotSortable,
@@ -257,36 +298,24 @@ internal sealed class RolePermissionScreen : UserControl
             }
         }
 
-        var changed = matrix.ChangedRoleCount;
-        _status.Text = changed == 0
-            ? "Chọn một cột để sửa vai trò. Bấm vào dòng nhóm để bật/tắt cả nhóm."
-            : $"Có thay đổi chưa lưu ở {changed} vai trò. Quyền mới áp dụng từ lần đăng nhập tiếp theo.";
-        _status.ForeColor = changed == 0 ? theme.Colors.TextSecondary : theme.Colors.TextPrimary;
         UpdateToolbarState();
     }
 
     private void ToggleCell(int rowIndex, int columnIndex)
     {
-        if (_matrix is not { } matrix || rowIndex < 0 || columnIndex < FirstRoleColumn)
+        if (rowIndex < 0 || columnIndex < FirstRoleColumn || _grid.Columns[columnIndex].Tag is not RoleDto role)
         {
             return;
         }
 
-        var role = (RoleDto)_grid.Columns[columnIndex].Tag!;
-        var changed = _grid.Rows[rowIndex].Tag switch
+        switch (_grid.Rows[rowIndex].Tag)
         {
-            PermissionGroupDto group => matrix.ToggleGroup(role.Id, group),
-            PermissionItem item => matrix.Toggle(role.Id, item.Key),
-            _ => false,
-        };
-
-        if (changed)
-        {
-            RefreshCells();
-        }
-        else if (!matrix.CanEdit(role.Id))
-        {
-            _status.Text = "Vai trò Admin luôn có toàn bộ quyền, không thể thay đổi.";
+            case PermissionGroupDto group:
+                _presenter.ToggleGroup(role.Id, group);
+                break;
+            case PermissionItem item:
+                _presenter.Toggle(role.Id, item.Key);
+                break;
         }
     }
 
@@ -300,91 +329,11 @@ internal sealed class RolePermissionScreen : UserControl
 
     private void UpdateToolbarState()
     {
-        var dirty = _matrix?.IsDirty ?? false;
         var role = SelectedRole;
-        _save.Enabled = dirty;
-        _undo.Enabled = dirty;
-        _editRole.Enabled = role is not null;
-        _deleteRole.Enabled = role is { IsSystem: false, UserCount: 0 };
-    }
-
-    private bool EnsureSaved()
-    {
-        if (_matrix is not { IsDirty: true })
-        {
-            return true;
-        }
-
-        ModernDialog.Show(this, "Hãy lưu hoặc hoàn tác thay đổi phân quyền trước.", Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
-        return false;
-    }
-
-    private void OpenRole(RoleDto? role)
-    {
-        if (_matrix is null || !EnsureSaved())
-        {
-            return;
-        }
-
-        using var dialog = new RoleEditForm(_scopeFactory, role, _matrix.Roles);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            Toaster.Success(this, role is null ? "Đã thêm vai trò mới." : $"Đã lưu vai trò {role.Name}.");
-            _ = ReloadAsync();
-        }
-    }
-
-    private async Task DeleteRoleAsync()
-    {
-        if (SelectedRole is not { } role || !EnsureSaved())
-        {
-            return;
-        }
-
-        if (!ModernDialog.Confirm(this, $"Xóa vai trò \"{role.Name}\"? Thao tác này không hoàn tác được.", Caption, "Xóa vai trò", "Giữ lại", danger: true))
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IRoleService>().DeleteAsync(role.Id);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        await ReloadAsync();
-    }
-
-    private async Task SaveAsync()
-    {
-        if (_matrix is not { IsDirty: true } matrix)
-        {
-            return;
-        }
-
-        _save.Enabled = false;
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IRoleService>().SavePermissionMatrixAsync(matrix.Changes);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            UpdateToolbarState();
-            return;
-        }
-
-        await ReloadAsync();
-        _status.Text = "Đã lưu phân quyền. Người dùng nhận quyền mới khi đăng nhập lại.";
+        var canManage = _presenter.CanManage;
+        _save.Enabled = _presenter.CanSave;
+        _undo.Enabled = canManage && _presenter.HasChanges;
+        _editRole.Enabled = canManage && role is not null;
+        _deleteRole.Enabled = canManage && RolePermissionPresenter.CanDelete(role);
     }
 }

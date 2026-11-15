@@ -1,72 +1,76 @@
-using FluentValidation;
-using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Users;
-using GroceryPOS.Application.Validation;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Users;
 using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Inputs;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace GroceryPOS.App.Forms.Dialogs;
 
 /// <summary>
-/// Add/edit dialog for a role's name and description. A new role can start from another role's permissions
-/// ("Sao chép quyền từ"); permissions themselves are edited in the matrix. System role names are read-only.
+/// Add/edit dialog for a role's name and description – passive MVP view of <see cref="RoleEditPresenter"/>.
+/// A new role can start from another role's permissions ("Sao chép quyền từ"); permissions themselves are edited in
+/// the matrix. System role names are read-only.
 /// </summary>
-internal sealed class RoleEditForm : BaseEditDialog
+internal sealed class RoleEditForm : BaseEditDialog, IRoleEditView
 {
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly RoleDto? _role;
+    private readonly RoleEditPresenter _presenter;
     private readonly ModernTextBox _name;
     private readonly ModernTextBox _description;
     private readonly ModernComboBox? _copyFrom;
 
-    public RoleEditForm(IServiceScopeFactory scopeFactory, RoleDto? role, IReadOnlyList<RoleDto> roles)
-        : base(role is null ? "Thêm vai trò" : "Sửa vai trò", contentWidth: 396)
+    public RoleEditForm(RoleEditPresenter presenter)
+        : base(presenter.Title, contentWidth: 396)
     {
-        _scopeFactory = scopeFactory;
-        _role = role;
+        _presenter = presenter;
+        var role = presenter.Role;
 
         _name = AddField("Tên vai trò", new ModernTextBox
         {
             Text = role?.Name ?? string.Empty,
-            ReadOnly = role is { IsSystem: true },
+            ReadOnly = presenter.NameLocked,
             PlaceholderText = "vd: Kế toán",
-            HelperText = role is { IsSystem: true } ? "Vai trò hệ thống – không đổi được tên." : null,
+            HelperText = presenter.NameHelperText,
         });
         _description = AddField("Mô tả", new ModernTextBox { Text = role?.Description ?? string.Empty, PlaceholderText = "Không bắt buộc" });
 
-        if (role is null)
+        if (presenter.IsNew)
         {
-            var sources = new List<RoleSource> { new(0, "(Không – bắt đầu trống)", Array.Empty<string>()) };
-            sources.AddRange(roles.Select(r => new RoleSource(r.Id, r.Name, r.Permissions)));
             _copyFrom = AddField("Sao chép quyền từ", new ModernComboBox
             {
-                DataSource = sources,
-                DisplayMember = nameof(RoleSource.Name),
-                ValueMember = nameof(RoleSource.Id),
+                DataSource = presenter.CopySources.ToList(),
+                DisplayMember = nameof(RoleCopySource.Name),
+                ValueMember = nameof(RoleCopySource.Id),
                 HelperText = "Quyền chi tiết chỉnh trong bảng phân quyền sau khi tạo.",
             });
         }
+
+        _presenter.Attach(this);
     }
 
-    protected override async Task<string?> SaveAsync()
+    string IRoleEditView.RoleName => _name.Text;
+
+    string IRoleEditView.Description => _description.Text;
+
+    int? IRoleEditView.CopyFromRoleId => _copyFrom?.SelectedValue is int id ? id : null;
+
+    bool IView.IsAlive => IsAlive;
+
+    void IRoleEditView.FocusField(string field)
     {
-        var description = string.IsNullOrWhiteSpace(_description.Text) ? null : _description.Text.Trim();
-        var permissions = _role?.Permissions.ToList()
-                          ?? (_copyFrom?.SelectedItem as RoleSource)?.Permissions.ToList()
-                          ?? new List<string>();
-        var request = new SaveRoleRequest(_name.Text.Trim(), description, permissions);
-
-        using var scope = _scopeFactory.CreateScope();
-        if (scope.ServiceProvider.GetRequiredService<IValidator<SaveRoleRequest>>().Check(request) is { IsFailure: true } invalid)
-        {
-            return invalid.ErrorMessageOrNull();
-        }
-
-        var roles = scope.ServiceProvider.GetRequiredService<IRoleService>();
-        var result = _role is null ? await roles.CreateAsync(request) : await roles.UpdateAsync(_role.Id, request);
-        return result.ErrorMessageOrNull();
+        Control target = field == nameof(SaveRoleRequest.Description) ? _description : _name;
+        target.Select();
     }
 
-    private sealed record RoleSource(int Id, string Name, IReadOnlyCollection<string> Permissions);
+    protected override Task<string?> SaveAsync() => _presenter.SaveAsync();
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

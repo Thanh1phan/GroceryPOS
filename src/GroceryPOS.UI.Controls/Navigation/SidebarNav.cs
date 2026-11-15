@@ -13,6 +13,12 @@ public sealed class NavItemEventArgs(NavItem item) : EventArgs
     public NavItem Item { get; } = item;
 }
 
+/// <summary>Raised before another item is opened; set <see cref="System.ComponentModel.CancelEventArgs.Cancel"/> to stay.</summary>
+public sealed class NavItemSelectingEventArgs(NavItem item) : System.ComponentModel.CancelEventArgs
+{
+    public NavItem Item { get; } = item;
+}
+
 /// <summary>
 /// Application sidebar: brand header with a collapse button, then sections of menu items (icon, text, shortcut hint,
 /// notification badge). Items the user has no permission for are hidden (<see cref="PermissionFilter"/>).
@@ -61,6 +67,12 @@ public class SidebarNav : Control, IThemeable
 
     /// <summary>Raised when the user opens an item (click, Enter) or <see cref="SelectItem(string, bool)"/> asks for it.</summary>
     public event EventHandler<NavItemEventArgs>? ItemSelected;
+
+    /// <summary>
+    /// Raised before the user (or <see cref="SelectItem(string, bool)"/> with events) opens a different item – e.g. so
+    /// the open screen can ask about unsaved changes. Cancelling keeps the current selection.
+    /// </summary>
+    public event EventHandler<NavItemSelectingEventArgs>? ItemSelecting;
 
     public event EventHandler? CollapsedChanged;
 
@@ -202,8 +214,8 @@ public class SidebarNav : Control, IThemeable
     public int GetBadge(string key) => _badges.TryGetValue(key, out var badge) ? badge.Count : 0;
 
     /// <summary>
-    /// Selects an item by key. Returns false when the key is not in the visible menu (unknown or not permitted);
-    /// a null key clears the selection.
+    /// Selects an item by key. Returns false when the key is not in the visible menu (unknown or not permitted) or
+    /// an <see cref="ItemSelecting"/> handler cancelled; a null key clears the selection.
     /// </summary>
     public bool SelectItem(string? key, bool raiseEvent = true)
     {
@@ -218,6 +230,16 @@ public class SidebarNav : Control, IThemeable
         if (item is null)
         {
             return false;
+        }
+
+        if (raiseEvent && ItemSelecting is { } selecting && !string.Equals(item.Key, _selectedKey, StringComparison.Ordinal))
+        {
+            var args = new NavItemSelectingEventArgs(item);
+            selecting(this, args);
+            if (args.Cancel)
+            {
+                return false;
+            }
         }
 
         _selectedKey = item.Key;

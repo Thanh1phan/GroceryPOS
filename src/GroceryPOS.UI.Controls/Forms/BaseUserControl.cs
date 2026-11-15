@@ -27,6 +27,12 @@ public class BaseUserControl : UserControl
     /// <summary>(Re)loads the screen's data. Called on first show and on F5.</summary>
     public virtual Task RefreshDataAsync() => Task.CompletedTask;
 
+    /// <summary>
+    /// Asked by the host before it replaces or closes the screen (another menu item, sign-out, closing the window).
+    /// Return false to stay – e.g. after asking whether to discard unsaved changes. Default: true.
+    /// </summary>
+    public virtual bool CanLeave() => true;
+
     /// <summary>Called once, the first time the screen is shown. Default: <see cref="RefreshDataAsync"/>.</summary>
     protected virtual Task OnFirstLoadAsync() => RefreshDataAsync();
 

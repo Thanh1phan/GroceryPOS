@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-15
+- **Vai trò & phân quyền** moved to MVP: `Presentation.Users.RolePermissionPresenter` (permission, matrix load with the selected column kept, toggle one permission or a whole group, Admin column read-only with a hint, undo, save all changed roles then reload, add/edit/delete role with a red delete confirmation and toasts) and `RoleEditPresenter` (system names locked, "Sao chép quyền từ" for new roles, edits keep the role's permissions, first invalid field focused). `RolePermissionScreen` (now a `BaseUserControl`, F5 reloads) and `RoleEditForm` are passive views resolved through DI.
+- **Unsaved changes are no longer lost silently**: new `BaseUserControl.CanLeave()` and a cancellable `SidebarNav.ItemSelecting` event; the main window asks the open screen before switching menu items, signing out or closing. The permission matrix asks "Bỏ các thay đổi này?" when it has unsaved changes (F5 too).
+- Saving a matrix change that removes "Quản lý vai trò & phân quyền" from your own role now asks first (you could no longer open the screen after signing in again).
+- Fix: screens replaced in the main window were never disposed (they stayed subscribed to theme changes and kept their data in memory); they are now disposed after switching.
+- 26 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 427, Presentation 142 – all passing).
+
 ## 2026-11-14
 - **Sản phẩm** moved to MVP: `Presentation.Catalog.ProductListPresenter` (permission, edit from fresh details with reload when the product vanished, stop/resume selling, price history, Excel export and import – file picking, the loading overlay and saving stay in the view through `IProductListView`) and `ProductEditPresenter` (category list incl. a stopped current category, VAT options, live margin, loss-price confirmation only when a price was actually changed, "Đang bán" applied after saving).
 - **Người dùng** moved to MVP: `Presentation.Users.UserListPresenter` (add/edit/reset/unlock/stop-resume, own account protected), `UserEditPresenter` (assignable roles + current role, own role locked, temporary password shown once) and `ResetPasswordPresenter`; `UserListScreen`, `UserEditForm`, `ResetPasswordForm`, `ProductListScreen` and `ProductEditForm` are now passive views resolved through DI.
