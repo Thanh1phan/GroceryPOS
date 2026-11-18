@@ -199,7 +199,7 @@ public sealed class MainForm : Form
             "returns" => new ReturnScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_services),
             "products" => new ProductListScreen(_services),
-            "inventory" => new InventoryScreen(_scopeFactory, _currentUser),
+            "inventory" => new InventoryScreen(_services),
             "purchases" => new PurchaseScreen(_scopeFactory, _currentUser),
             "customers" => new CustomerListScreen(_services),
             "suppliers" => new SupplierListScreen(_services),

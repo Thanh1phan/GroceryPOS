@@ -1,4 +1,5 @@
 using GroceryPOS.Presentation.Catalog;
+using GroceryPOS.Presentation.Inventory;
 using GroceryPOS.Presentation.Partners;
 using GroceryPOS.Presentation.Users;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,8 @@ public static class DependencyInjection
         services.AddTransient<ResetPasswordPresenter>();
         services.AddTransient<RolePermissionPresenter>();
         services.AddTransient<RoleEditPresenter>();
+        services.AddTransient<InventoryPresenter>();
+        services.AddTransient<StockAdjustmentPresenter>();
         return services;
     }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-18
+- **Tồn kho** moved to MVP: `Presentation.Inventory.InventoryPresenter` (permission, stock list + low-stock alerts loaded together with "latest wins", KPI cards via the tested `InventorySummary`, "Hiện SP ngừng kinh doanh" filter, Điều chỉnh F6 / Thẻ kho F7 / Kiểm kê F8 flows) and `StockAdjustmentPresenter` (header texts, reason list, live preview and its tone, target-balance warning, save). `InventoryScreen` (now a `BaseUserControl`, F5 reloads) and `StockAdjustmentDialog` are passive views resolved through DI.
+- After a saved stock adjustment the screen now confirms with a toast ("Đã điều chỉnh SP001 – Sữa tươi: −2 → tồn 8 hộp.") – a warning toast when the product ends under its minimum level; previously it reloaded silently.
+- Fixes: a failed low-stock load was silently ignored (the "Sắp hết hàng" tab just looked empty) – it now shows an error toast while still showing the stock; a slow reload can no longer overwrite a newer one; adjusting a product that vanished from the list asks to refresh (F5).
+- New UI-free `Mvp.Tone` for colors chosen by presenters; `LowStockRow` (reorder suggestion: refill to twice the minimum) moved to the presentation layer.
+- 36 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 427, Presentation 178 – all passing).
+
 ## 2026-11-15
 - **Vai trò & phân quyền** moved to MVP: `Presentation.Users.RolePermissionPresenter` (permission, matrix load with the selected column kept, toggle one permission or a whole group, Admin column read-only with a hint, undo, save all changed roles then reload, add/edit/delete role with a red delete confirmation and toasts) and `RoleEditPresenter` (system names locked, "Sao chép quyền từ" for new roles, edits keep the role's permissions, first invalid field focused). `RolePermissionScreen` (now a `BaseUserControl`, F5 reloads) and `RoleEditForm` are passive views resolved through DI.
 - **Unsaved changes are no longer lost silently**: new `BaseUserControl.CanLeave()` and a cancellable `SidebarNav.ItemSelecting` event; the main window asks the open screen before switching menu items, signing out or closing. The permission matrix asks "Bỏ các thay đổi này?" when it has unsaved changes (F5 too).

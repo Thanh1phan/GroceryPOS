@@ -2,6 +2,7 @@ using FluentValidation;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
+using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Application.Validation;
@@ -223,6 +224,8 @@ internal sealed class TestHost : IDisposable
         services.AddSingleton(Roles);
         services.AddScoped<IRoleService>(sp => sp.GetRequiredService<FakeRoleService>());
         services.AddTransient<IValidator<SaveRoleRequest>, SaveRoleRequestValidator>();
+        services.AddSingleton(Inventory);
+        services.AddScoped<IInventoryService>(sp => sp.GetRequiredService<FakeInventoryService>());
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
@@ -240,6 +243,8 @@ internal sealed class TestHost : IDisposable
     public FakeUserManagementService Users { get; } = new();
 
     public FakeProductService Products { get; } = new();
+
+    public FakeInventoryService Inventory { get; } = new();
 
     public ServiceProvider Provider { get; }
 

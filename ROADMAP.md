@@ -29,7 +29,7 @@ Checklist of milestones. Each daily run picks the next unchecked items.
 - [x] Migrate suppliers and customers to MVP (`Partners.SupplierListPresenter`/`SupplierEditPresenter`, `CustomerListPresenter`/`CustomerEditPresenter`; `IView.Confirm`, `FormInput` helpers, first invalid field focused)
 - [x] Migrate products and users to MVP (`Catalog.ProductListPresenter`/`ProductEditPresenter` incl. Excel import/export and loss-price confirmation; `Users.UserListPresenter`/`UserEditPresenter`/`ResetPasswordPresenter`; `IView.ShowInfo`, red `Confirm(danger)`)
 - [x] Migrate roles (Phân quyền matrix + role dialog) to MVP (`Users.RolePermissionPresenter`/`RoleEditPresenter`; unsaved-changes guard via `BaseUserControl.CanLeave` + `SidebarNav.ItemSelecting`)
-- [ ] Migrate the operational screens to MVP (inventory, purchasing, supplier debt, shifts, settings, backup, audit log, reports, dashboard; POS and returns last)
+- [ ] Migrate the operational screens to MVP (~~inventory~~ ✓ Tồn kho + Điều chỉnh tồn kho, purchasing, supplier debt, shifts, settings, backup, audit log, reports, dashboard; POS and returns last)
 - [x] Global exception handling + Serilog wiring in WinForms host (synchronous STA `Main`)
 
 ## M3 – UI component library (GroceryPOS.UI.Controls)

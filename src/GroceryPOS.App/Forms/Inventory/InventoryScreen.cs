@@ -1,11 +1,10 @@
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Inventory;
-using GroceryPOS.Domain.Identity;
+using GroceryPOS.Presentation.Inventory;
+using GroceryPOS.Presentation.Mvp;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Navigation;
@@ -17,10 +16,12 @@ namespace GroceryPOS.App.Forms.Inventory;
 /// <summary>
 /// Tồn kho: KPI cards (stock value at cost, products, low/out of stock), a "Tồn kho" tab with every product and a
 /// "Sắp hết hàng" tab with the low-stock alerts; from either tab: Điều chỉnh (F6), Thẻ kho (F7), Kiểm kê (F8).
+/// Passive MVP view – the logic lives in <see cref="InventoryPresenter"/>.
 /// </summary>
-internal sealed class InventoryScreen : UserControl
+internal sealed class InventoryScreen : BaseUserControl, IInventoryView
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IServiceProvider _services;
+    private readonly InventoryPresenter _presenter;
     private readonly bool _canAdjust;
     private readonly StatCard _value;
     private readonly StatCard _products;
@@ -33,13 +34,13 @@ internal sealed class InventoryScreen : UserControl
     private readonly CheckBox _showInactive;
     private readonly ModernButton _adjust;
     private readonly ModernButton _card;
-    private IReadOnlyList<StockItem> _stock = [];
 
-    public InventoryScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public InventoryScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _canAdjust = currentUser.HasPermission(Permissions.InventoryAdjust);
-        Dock = DockStyle.Fill;
+        _services = services;
+        _presenter = services.GetRequiredService<InventoryPresenter>();
+        _presenter.Attach(this);
+        _canAdjust = _presenter.CanAdjust;
 
         // ---- KPI row --------------------------------------------------------------------------------
         _value = Stat("Giá trị tồn kho (giá vốn)", Glyphs.Money, BadgeKind.Primary);
@@ -49,12 +50,12 @@ internal sealed class InventoryScreen : UserControl
         var stats = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
         stats.Controls.AddRange([_value, _products, _low, _out]);
 
-        _adjust = Action("Điều chỉnh (F6)", Glyphs.Edit, ButtonVariant.Secondary, async () => await AdjustSelectedAsync());
+        _adjust = Action("Điều chỉnh (F6)", Glyphs.Edit, ButtonVariant.Secondary, () => _presenter.AdjustAsync(SelectedProductId));
         _adjust.Visible = _canAdjust;
-        _card = Action("Thẻ kho (F7)", Glyphs.History, ButtonVariant.Secondary, () => { ShowCardOfSelected(); return Task.CompletedTask; });
-        var count = Action("Kiểm kê (F8)", Glyphs.List, ButtonVariant.Primary, async () => await OpenCountAsync());
+        _card = Action("Thẻ kho (F7)", Glyphs.History, ButtonVariant.Secondary, () => { _presenter.ShowCard(SelectedProductId); return Task.CompletedTask; });
+        var count = Action("Kiểm kê (F8)", Glyphs.List, ButtonVariant.Primary, _presenter.CountAsync);
         count.Visible = _canAdjust;
-        var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAsync);
+        var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, RefreshDataAsync);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 24, 0, 0) };
         actions.Controls.AddRange([_adjust, _card, count, refresh]);
 
@@ -74,12 +75,12 @@ internal sealed class InventoryScreen : UserControl
         _stockGrid.AddMoneyColumn(nameof(StockItem.CostPrice), "Giá vốn", width: 120);
         _stockGrid.AddMoneyColumn(nameof(StockItem.StockValue), "Giá trị tồn", width: 140);
         _stockGrid.AddTextColumn(nameof(StockItem.StatusName), "Trạng thái", width: 120);
-        _stockGrid.RowActivated += (_, e) => ShowCard(((StockItem)e.Item).ProductId);
+        _stockGrid.RowActivated += (_, e) => _presenter.ShowCard(((StockItem)e.Item).ProductId);
         _stockGrid.SelectionChanged += (_, _) => UpdateButtons();
         _stockGrid.InnerGrid.CellFormatting += (_, e) => ToneStatusCell(_stockGrid, e);
 
         _showInactive = new CheckBox { Text = "Hiện SP ngừng kinh doanh", AutoSize = true, Margin = new Padding(8, 12, 8, 0) };
-        _showInactive.CheckedChanged += (_, _) => RenderStock();
+        _showInactive.CheckedChanged += (_, _) => _presenter.SetShowInactive(_showInactive.Checked);
         _stockGrid.ToolbarItems.Controls.Add(_showInactive);
 
         var stockPage = new ModernTabPage("Tồn kho") { IconGlyph = Glyphs.Package, Padding = new Padding(0, 8, 0, 0) };
@@ -96,7 +97,7 @@ internal sealed class InventoryScreen : UserControl
         _lowGrid.AddNumberColumn(nameof(LowStockRow.Suggested), "Đề xuất nhập", width: 120, decimals: 3);
         _lowGrid.AddMoneyColumn(nameof(LowStockRow.SuggestedCost), "Tiền nhập dự kiến", width: 150);
         _lowGrid.AddTextColumn(nameof(LowStockRow.StatusName), "Trạng thái", width: 110);
-        _lowGrid.RowActivated += (_, e) => ShowCard(((LowStockRow)e.Item).ProductId);
+        _lowGrid.RowActivated += (_, e) => _presenter.ShowCard(((LowStockRow)e.Item).ProductId);
         _lowGrid.SelectionChanged += (_, _) => UpdateButtons();
         _lowGrid.InnerGrid.CellFormatting += (_, e) => ToneStatusCell(_lowGrid, e);
 
@@ -113,30 +114,33 @@ internal sealed class InventoryScreen : UserControl
 
         Controls.Add(body);
         Controls.Add(header);
-
-        Load += async (_, _) => await ReloadAsync();
+        UpdateButtons();
     }
+
+    bool IView.IsAlive => IsAlive;
+
+    public override Task RefreshDataAsync() => _presenter.LoadAsync();
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         switch (keyData)
         {
             case Keys.F6 when _canAdjust:
-                _ = AdjustSelectedAsync();
+                Run(() => _presenter.AdjustAsync(SelectedProductId));
                 return true;
             case Keys.F7:
-                ShowCardOfSelected();
+                _presenter.ShowCard(SelectedProductId);
                 return true;
             case Keys.F8 when _canAdjust:
-                _ = OpenCountAsync();
-                return true;
-            case Keys.F5:
-                _ = ReloadAsync();
+                Run(_presenter.CountAsync);
                 return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
+
+    /// <summary>Fire-and-forget from a key press; exceptions still reach the global handler.</summary>
+    private static async void Run(Func<Task> work) => await work();
 
     private static ModernButton Action(string text, string glyph, ButtonVariant variant, Func<Task> onClick)
     {
@@ -162,11 +166,11 @@ internal sealed class InventoryScreen : UserControl
         }
 
         var palette = ThemeManager.Current.Colors;
-        e.CellStyle!.ForeColor = status switch
+        e.CellStyle!.ForeColor = InventoryPresenter.StatusTone(status) switch
         {
-            "Hết hàng" or "Tồn âm" => palette.Danger,
-            "Sắp hết" => palette.Warning,
-            "Ngừng kinh doanh" => palette.TextMuted,
+            Tone.Danger => palette.Danger,
+            Tone.Warning => palette.Warning,
+            Tone.Muted => palette.TextMuted,
             _ => e.CellStyle.ForeColor,
         };
     }
@@ -177,123 +181,64 @@ internal sealed class InventoryScreen : UserControl
 
     private void UpdateButtons()
     {
-        var selected = SelectedProductId is not null;
-        _adjust.Enabled = _canAdjust && selected;
-        _card.Enabled = selected;
+        var selected = SelectedProductId;
+        _adjust.Enabled = _presenter.CanAdjustSelection(selected);
+        _card.Enabled = InventoryPresenter.CanShowCard(selected);
     }
 
-    private async Task ReloadAsync()
+    void IInventoryView.ShowStock(IReadOnlyList<StockItem> items)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var inventory = scope.ServiceProvider.GetRequiredService<IInventoryService>();
-        var stock = await inventory.GetStockListAsync();
-        var low = await inventory.GetLowStockAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (stock.IsFailure)
-        {
-            ModernDialog.Show(this, stock.Error.Message, "Tồn kho", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        _stock = stock.Value;
-        RenderStock();
-
-        var lowRows = low.IsSuccess ? low.Value.Select(LowStockRow.From).ToList() : [];
-        _lowGrid.SetItems(lowRows);
-        _lowPage.BadgeCount = lowRows.Count;
-
-        var active = _stock.Where(i => i.IsActive).ToList();
-        _value.Value = Vnd.Format(active.Sum(i => i.StockValue));
-        _value.Note = $"Giá bán: {Vnd.Format(active.Sum(i => Math.Max(0, i.StockQuantity) * i.SellPrice))}";
-        _products.Value = active.Count.ToString("#,0", Vnd.Culture);
-        _products.Note = $"{active.Count(i => i.StockQuantity > 0):#,0} còn hàng";
-        _low.Value = lowRows.Count(r => !r.IsOutOfStock).ToString("#,0", Vnd.Culture);
-        _low.Note = "Dưới hoặc bằng định mức";
-        _out.Value = lowRows.Count(r => r.IsOutOfStock).ToString("#,0", Vnd.Culture);
-        var negative = active.Count(i => i.StockQuantity < 0);
-        _out.Note = negative > 0 ? $"{negative} sản phẩm tồn âm – cần kiểm kê" : null;
+        _stockGrid.SetItems(items);
         UpdateButtons();
     }
 
-    private void RenderStock() =>
-        _stockGrid.SetItems(_showInactive.Checked ? _stock : _stock.Where(i => i.IsActive).ToList());
-
-    private void ShowCardOfSelected()
+    void IInventoryView.ShowLowStock(IReadOnlyList<LowStockRow> rows)
     {
-        if (SelectedProductId is { } id)
-        {
-            ShowCard(id);
-        }
+        _lowGrid.SetItems(rows);
+        _lowPage.BadgeCount = rows.Count;
+        UpdateButtons();
     }
 
-    private void ShowCard(int productId)
+    void IInventoryView.ShowSummary(InventorySummary summary)
     {
-        using var form = new StockCardForm(_scopeFactory, productId);
+        _value.Value = summary.StockValueText;
+        _value.Note = summary.StockValueNote;
+        _products.Value = summary.ProductsText;
+        _products.Note = summary.ProductsNote;
+        _low.Value = summary.LowStockText;
+        _low.Note = summary.LowStockNote;
+        _out.Value = summary.OutOfStockText;
+        _out.Note = summary.OutOfStockNote;
+    }
+
+    StockAdjustmentResult? IInventoryView.OpenAdjustment(StockItem product)
+    {
+        using var dialog = new StockAdjustmentDialog(_services.GetRequiredService<StockAdjustmentPresenter>().For(product));
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Adjusted : null;
+    }
+
+    bool IInventoryView.OpenStockCount(IReadOnlyList<StockItem> catalog)
+    {
+        using var form = new StockCountForm(_services.GetRequiredService<IServiceScopeFactory>(), catalog);
+        return form.ShowDialog(this) == DialogResult.OK;
+    }
+
+    void IInventoryView.OpenStockCard(int productId)
+    {
+        using var form = new StockCardForm(_services.GetRequiredService<IServiceScopeFactory>(), productId);
         form.ShowDialog(this);
     }
 
-    private async Task AdjustSelectedAsync()
-    {
-        if (!_canAdjust || SelectedProductId is not { } id || _stock.FirstOrDefault(i => i.ProductId == id) is not { } item)
-        {
-            return;
-        }
+    void IInventoryView.ToastWarning(string message, string? title) => ToastWarning(message, title);
 
-        using var dialog = new StockAdjustmentDialog(_scopeFactory, item);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            await ReloadAsync();
-        }
-    }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-    private async Task OpenCountAsync()
-    {
-        if (!_canAdjust)
-        {
-            return;
-        }
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
 
-        using var form = new StockCountForm(_scopeFactory, _stock);
-        if (form.ShowDialog(this) == DialogResult.OK)
-        {
-            await ReloadAsync();
-        }
-    }
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger: danger);
 
-    /// <summary>Low-stock alert row with a reorder suggestion (refill to twice the minimum, as purchasing does).</summary>
-    private sealed record LowStockRow(
-        int ProductId,
-        string ProductCode,
-        string ProductName,
-        string Unit,
-        decimal StockQuantity,
-        decimal MinStockLevel,
-        decimal Shortage,
-        decimal Suggested,
-        decimal SuggestedCost,
-        bool IsOutOfStock,
-        string StatusName)
-    {
-        public static LowStockRow From(LowStockItem item)
-        {
-            // Same rule as GoodsReceiptService.SuggestedQuantity: refill to twice the minimum, whole units.
-            var suggested = Math.Max(0, Math.Ceiling(Math.Max(item.MinStockLevel * 2, 0) - item.StockQuantity));
-            return new LowStockRow(
-                item.ProductId,
-                item.ProductCode,
-                item.ProductName,
-                item.Unit,
-                item.StockQuantity,
-                item.MinStockLevel,
-                item.Shortage,
-                suggested,
-                Math.Round(suggested * item.CostPrice, 0, MidpointRounding.AwayFromZero),
-                item.IsOutOfStock,
-                item.IsOutOfStock ? "Hết hàng" : "Sắp hết");
-        }
-    }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }
