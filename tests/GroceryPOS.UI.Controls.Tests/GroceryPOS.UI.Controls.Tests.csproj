@@ -26,6 +26,7 @@
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Inputs\Core\**\*.cs" LinkBase="InputCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Grids\Core\**\*.cs" LinkBase="GridCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Display\Core\**\*.cs" LinkBase="DisplayCore" />
+    <Compile Include="..\..\src\GroceryPOS.UI.Controls\Buttons\Core\**\*.cs" LinkBase="ButtonCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Navigation\Core\**\*.cs" LinkBase="NavigationCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Feedback\Core\**\*.cs" LinkBase="FeedbackCore" />
     <Compile Include="..\..\src\GroceryPOS.UI.Controls\Forms\Core\**\*.cs" LinkBase="FormsCore" />

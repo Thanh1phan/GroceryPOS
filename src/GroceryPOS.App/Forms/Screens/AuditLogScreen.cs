@@ -83,18 +83,16 @@ internal sealed class AuditLogScreen : UserControl
             filter.SelectedIndexChanged += (_, _) => OnFiltersChanged(reloadSummary: false);
         }
 
-        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        filters.Controls.AddRange([_period, _category, _severity, _user]);
 
         var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAllAsync);
         var export = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, ExportAsync);
         var clear = Action("Bỏ lọc", Glyphs.Clear, ButtonVariant.Secondary, () => { ClearFilters(); return Task.CompletedTask; });
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
+        var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
         actions.Controls.AddRange([clear, refresh, export]);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(24, 16, 24, 0) };
-        header.Controls.Add(filters);
-        header.Controls.Add(actions);
+        // Filters and actions wrap onto more lines on narrow windows instead of being hidden behind each other.
+        var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 16, 24, 0) };
+        header.Controls.AddRange([_period, _category, _severity, _user, actions]);
 
         // ---- KPI row (click = filter) ----------------------------------------------------------------------
         _total = Stat("Tổng sự kiện", Glyphs.History, BadgeKind.Primary, () => ApplyQuickFilter(null, null));
@@ -102,8 +100,8 @@ internal sealed class AuditLogScreen : UserControl
         _salesExceptions = Stat("Hủy HĐ · trả hàng · in lại", Glyphs.Return, BadgeKind.Danger, () => ApplyQuickFilter(AuditCategory.Sales, AuditSeverity.Warning));
         _stockAndPrice = Stat("Đổi giá · chỉnh kho", Glyphs.Package, BadgeKind.Info, () => ApplyQuickFilter(null, AuditSeverity.Warning));
         _status = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 100, 0, 0), Font = ThemeFonts.Get(FontRole.Caption) };
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 136, WrapContents = false, Padding = new Padding(24, 4, 24, 0) };
-        stats.Controls.AddRange([_total, _security, _salesExceptions, _stockAndPrice, _status]);
+        var stats = new StatCardRow { CardHeight = 120, MinCardWidth = 180, Padding = new Padding(24, 4, 24, 12) };
+        stats.AddCards(_total, _security, _salesExceptions, _stockAndPrice, _status);
 
         // ---- Grid (server-paged) --------------------------------------------------------------------------
         _grid = new ModernDataGrid

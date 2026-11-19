@@ -42,11 +42,11 @@ internal sealed class CustomerLoyaltyHistoryForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         MinimizeBox = false;
 
-        var cards = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 132, Padding = new Padding(16, 16, 16, 0), WrapContents = false };
+        var cards = new StatCardRow { Padding = new Padding(16, 16, 16, 12) };
         _points = MakeCard("Điểm hiện có", Glyphs.Money, BadgeKind.Success);
         _spent = MakeCard("Tổng chi tiêu", Glyphs.Shop, BadgeKind.Primary);
         _invoices = MakeCard("Số hóa đơn", Glyphs.Document, BadgeKind.Info);
-        cards.Controls.AddRange([_points, _spent, _invoices]);
+        cards.AddCards(_points, _spent, _invoices);
 
         _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Khách hàng chưa có giao dịch nào." };
         _grid.AddDateColumn(nameof(Row.Date), "Thời gian", width: 140, withTime: true);

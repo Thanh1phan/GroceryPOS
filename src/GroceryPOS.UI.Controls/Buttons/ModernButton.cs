@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using GroceryPOS.UI.Controls.Buttons.Core;
 using GroceryPOS.UI.Controls.Drawing;
 using GroceryPOS.UI.Controls.Theming;
 
@@ -18,6 +19,8 @@ public class ModernButton : Button, IThemeable
     private string? _iconGlyph;
     private bool _hovered;
     private bool _pressed;
+    private bool _autoFitWidth = true;
+    private int _contentWidth = -1;
 
     public ModernButton()
     {
@@ -79,8 +82,41 @@ public class ModernButton : Button, IThemeable
             if (_iconGlyph != value)
             {
                 _iconGlyph = string.IsNullOrEmpty(value) ? null : value;
-                Invalidate();
+                ContentChanged();
             }
+        }
+    }
+
+    /// <summary>
+    /// True (default): a button with text is never narrower than its icon + text, so a fixed width chosen in code can
+    /// no longer cut the caption with "…" (it grows to the right instead). Ignored for icon-only buttons, when docked
+    /// Fill/Top/Bottom or with <see cref="Control.AutoSize"/>, where the layout or <see cref="GetPreferredSize"/> decides.
+    /// </summary>
+    [Category("Layout")]
+    [DefaultValue(true)]
+    public bool AutoFitWidth
+    {
+        get => _autoFitWidth;
+        set
+        {
+            _autoFitWidth = value;
+            ContentChanged();
+        }
+    }
+
+    /// <summary>Width needed to show the icon and the whole text with the button's padding.</summary>
+    [Browsable(false)]
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+    public int ContentWidth
+    {
+        get
+        {
+            if (_contentWidth < 0)
+            {
+                _contentWidth = MeasureContentWidth();
+            }
+
+            return _contentWidth;
         }
     }
 
@@ -89,6 +125,70 @@ public class ModernButton : Button, IThemeable
     public InteractionState State => InteractionStates.From(Enabled, _hovered, _pressed);
 
     void IThemeable.ApplyTheme(Theme theme) => Invalidate();
+
+    /// <summary>Content width × the theme's control height; used by <see cref="Control.AutoSize"/> and layout panels.</summary>
+    public override Size GetPreferredSize(Size proposedSize) =>
+        new(ContentWidth, this.ScaleDpi(ThemeManager.Current.Spacing.ControlHeight));
+
+    protected override void SetBoundsCore(int x, int y, int width, int height, BoundsSpecified specified)
+    {
+        if (FitsWidth && (specified & BoundsSpecified.Width) != 0 && width < ContentWidth)
+        {
+            width = ContentWidth;
+        }
+
+        base.SetBoundsCore(x, y, width, height, specified);
+    }
+
+    protected override void OnTextChanged(EventArgs e)
+    {
+        base.OnTextChanged(e);
+        ContentChanged();
+    }
+
+    protected override void OnFontChanged(EventArgs e)
+    {
+        base.OnFontChanged(e);
+        ContentChanged();
+    }
+
+    protected override void OnDpiChangedAfterParent(EventArgs e)
+    {
+        base.OnDpiChangedAfterParent(e);
+        ContentChanged();
+    }
+
+    protected override void OnDockChanged(EventArgs e)
+    {
+        base.OnDockChanged(e);
+        ContentChanged();
+    }
+
+    // Icon-only buttons (pager, date arrows) are sized square on purpose and their glyph always fits centered.
+    private bool FitsWidth =>
+        _autoFitWidth && !AutoSize && !string.IsNullOrEmpty(Text) && Dock is not (DockStyle.Fill or DockStyle.Top or DockStyle.Bottom);
+
+    private void ContentChanged()
+    {
+        _contentWidth = -1;
+        if (FitsWidth && Width < ContentWidth)
+        {
+            Width = ContentWidth;
+        }
+
+        Invalidate();
+    }
+
+    private int MeasureContentWidth()
+    {
+        // Same fonts, flags and spacing as DrawContent.
+        const TextFormatFlags flags = TextFormatFlags.SingleLine | TextFormatFlags.NoPadding;
+        var theme = ThemeManager.Current;
+        var hasText = !string.IsNullOrEmpty(Text);
+        var iconWidth = _iconGlyph is null ? 0 : TextRenderer.MeasureText(_iconGlyph, ThemeFonts.Icon(Font.SizeInPoints + 1f), Size.Empty, flags).Width;
+        var textWidth = hasText ? TextRenderer.MeasureText(Text, Font, Size.Empty, flags | (ShowKeyboardCues ? 0 : TextFormatFlags.HidePrefix)).Width : 0;
+        return ButtonMetrics.ContentWidth(iconWidth, textWidth, this.ScaleDpi(theme.Spacing.Md), this.ScaleDpi(theme.Spacing.Sm), this.ScaleDpi(2));
+    }
 
     protected override void OnHandleCreated(EventArgs e)
     {

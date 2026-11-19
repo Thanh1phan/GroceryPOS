@@ -61,8 +61,8 @@ internal sealed class StockCardForm : Form
         _in = Stat("Nhập trong kỳ", Glyphs.Add, BadgeKind.Success);
         _out = Stat("Xuất trong kỳ", Glyphs.Cart, BadgeKind.Warning);
         _closing = Stat("Tồn cuối kỳ", Glyphs.Package, BadgeKind.Primary);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, WrapContents = false, Padding = new Padding(0, 4, 0, 8) };
-        stats.Controls.AddRange([_opening, _in, _out, _closing]);
+        var stats = new StatCardRow { Padding = new Padding(0, 4, 0, 12) };
+        stats.AddCards(_opening, _in, _out, _closing);
 
         _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Không có phát sinh trong khoảng thời gian này.", PageSize = 50 };
         _grid.AddDateColumn(nameof(CardRow.Timestamp), "Thời gian", width: 140, withTime: true);

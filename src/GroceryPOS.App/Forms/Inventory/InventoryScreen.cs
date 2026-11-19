@@ -1,3 +1,4 @@
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Presentation.Inventory;
 using GroceryPOS.Presentation.Mvp;
@@ -47,8 +48,8 @@ internal sealed class InventoryScreen : BaseUserControl, IInventoryView
         _products = Stat("Sản phẩm đang kinh doanh", Glyphs.Package, BadgeKind.Info);
         _low = Stat("Sắp hết hàng", Glyphs.Warning, BadgeKind.Warning);
         _out = Stat("Hết hàng", Glyphs.Error, BadgeKind.Danger);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        stats.Controls.AddRange([_value, _products, _low, _out]);
+        var stats = new StatCardRow { Padding = new Padding(24, 0, 24, 0) };
+        stats.AddCards(_value, _products, _low, _out);
 
         _adjust = Action("Điều chỉnh (F6)", Glyphs.Edit, ButtonVariant.Secondary, () => _presenter.AdjustAsync(SelectedProductId));
         _adjust.Visible = _canAdjust;
@@ -56,12 +57,7 @@ internal sealed class InventoryScreen : BaseUserControl, IInventoryView
         var count = Action("Kiểm kê (F8)", Glyphs.List, ButtonVariant.Primary, _presenter.CountAsync);
         count.Visible = _canAdjust;
         var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, RefreshDataAsync);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 24, 0, 0) };
-        actions.Controls.AddRange([_adjust, _card, count, refresh]);
-
-        var header = new Panel { Dock = DockStyle.Top, Height = 140, Padding = new Padding(24, 20, 24, 0) };
-        header.Controls.Add(stats);
-        header.Controls.Add(actions);
+        var actions = ScreenLayout.Toolbar(_adjust, _card, count, refresh);
 
         // ---- Stock tab ------------------------------------------------------------------------------
         _stockGrid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Chưa có sản phẩm nào.", SearchPlaceholder = "Tìm theo mã, mã vạch, tên, nhóm…" };
@@ -113,7 +109,8 @@ internal sealed class InventoryScreen : BaseUserControl, IInventoryView
         body.Controls.Add(_tabs);
 
         Controls.Add(body);
-        Controls.Add(header);
+        Controls.Add(stats);
+        Controls.Add(actions);
         UpdateButtons();
     }
 

@@ -84,27 +84,27 @@ internal sealed class ReportsScreen : UserControl
         _period.RangeChanged += async (_, _) => await OnFiltersChangedAsync(includingInventory: false);
         _status = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(12, 12, 0, 0), Font = ThemeFonts.Get(FontRole.Caption) };
 
-        var left = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
+        var left = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 16, 8) };
         left.Controls.AddRange([_period, _status]);
 
         var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAllAsync);
         var exportOne = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, () => ExportAsync(all: false));
         var exportAll = Action("Xuất tất cả", Glyphs.List, ButtonVariant.Secondary, () => ExportAsync(all: true));
         var print = Action("In / PDF (Ctrl+P)", Glyphs.Print, ButtonVariant.Secondary, () => PrintAsync(all: false));
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
+        var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
         actions.Controls.AddRange([refresh, print, exportAll, exportOne]);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 64, Padding = new Padding(24, 16, 24, 0) };
-        header.Controls.Add(left);
-        header.Controls.Add(actions);
+        // Period and actions share one line on wide windows and wrap onto two on narrow ones.
+        var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 16, 24, 0) };
+        header.Controls.AddRange([left, actions]);
 
         // ---- Tab 1: revenue -------------------------------------------------------------------------------
         _netRevenue = Stat("Doanh thu thuần", Glyphs.Money, BadgeKind.Success);
         _invoiceCount = Stat("Số hóa đơn", Glyphs.Document, BadgeKind.Primary);
         _grossProfit = Stat("Lợi nhuận gộp", Glyphs.Chart, BadgeKind.Info);
         _refunds = Stat("Hoàn trả & hủy", Glyphs.Return, BadgeKind.Warning);
-        var revenueStats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 140, WrapContents = false };
-        revenueStats.Controls.AddRange([_netRevenue, _invoiceCount, _grossProfit, _refunds]);
+        var revenueStats = new StatCardRow { Padding = new Padding(0, 0, 0, 12) };
+        revenueStats.AddCards(_netRevenue, _invoiceCount, _grossProfit, _refunds);
 
         _revenueChart = new BarChart { Dock = DockStyle.Fill, EmptyText = "Không có doanh thu trong kỳ này", TooltipFormatter = Vnd.Format };
         _revenueChartCard = Card("Doanh thu thuần", Glyphs.Chart, _revenueChart);
@@ -200,8 +200,8 @@ internal sealed class ReportsScreen : UserControl
         _retailValue = Stat("Giá trị tồn (giá bán)", Glyphs.Money, BadgeKind.Success);
         _potentialProfit = Stat("Lãi dự kiến", Glyphs.Chart, BadgeKind.Info);
         _stockAlerts = Stat("Hết / sắp hết hàng", Glyphs.Warning, BadgeKind.Warning);
-        var inventoryStats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 140, WrapContents = false };
-        inventoryStats.Controls.AddRange([_costValue, _retailValue, _potentialProfit, _stockAlerts]);
+        var inventoryStats = new StatCardRow { Padding = new Padding(0, 0, 0, 12) };
+        inventoryStats.AddCards(_costValue, _retailValue, _potentialProfit, _stockAlerts);
 
         _inventoryGrid = Grid("Chưa có sản phẩm nào.", search: true);
         _inventoryGrid.AddTextColumn(nameof(InventoryValueRowDto.CategoryName), "Danh mục");

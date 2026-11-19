@@ -1,3 +1,4 @@
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Inventory;
@@ -65,8 +66,8 @@ internal sealed class SupplierDebtScreen : UserControl
         _paid = Stat("Đã trả NCC trong kỳ", Glyphs.Accept, BadgeKind.Success);
         _returned = Stat("Trả hàng NCC trong kỳ", Glyphs.Return, BadgeKind.Info);
         _largest = Stat("Nợ lớn nhất", Glyphs.People, BadgeKind.Primary);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        stats.Controls.AddRange([_total, _paid, _returned, _largest]);
+        var stats = new StatCardRow { Padding = new Padding(24, 0, 24, 0) };
+        stats.AddCards(_total, _paid, _returned, _largest);
 
         _pay = Action("Thanh toán (F6)", Glyphs.Money, ButtonVariant.Primary, PaySelectedAsync);
         _pay.Visible = _canPay;
@@ -74,12 +75,7 @@ internal sealed class SupplierDebtScreen : UserControl
         var returns = Action("Trả hàng NCC (F8)", Glyphs.Return, ButtonVariant.Secondary, NewReturnAsync);
         returns.Visible = _canReturn;
         var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAsync);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 24, 0, 0) };
-        actions.Controls.AddRange([_pay, _ledger, returns, refresh]);
-
-        var header = new Panel { Dock = DockStyle.Top, Height = 140, Padding = new Padding(24, 20, 24, 0) };
-        header.Controls.Add(stats);
-        header.Controls.Add(actions);
+        var actions = ScreenLayout.Toolbar(_pay, _ledger, returns, refresh);
 
         // ---- Period filter (payments, returns, KPIs) ---------------------------------------------------
         var today = DateTime.Today;
@@ -163,7 +159,8 @@ internal sealed class SupplierDebtScreen : UserControl
 
         Controls.Add(body);
         Controls.Add(filter);
-        Controls.Add(header);
+        Controls.Add(stats);
+        Controls.Add(actions);
 
         Load += async (_, _) => await ReloadAsync();
     }

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-19
+- **Layout fixes for cut-off text and missing cards** (reported on a 100 % display): buttons now grow to fit their icon + caption instead of ending in "…" (`ModernButton.AutoFitWidth`, content-based `GetPreferredSize`, also fixing `AutoSize` buttons that ignored the icon and padding).
+- New `StatCardRow`: KPI cards share the width equally and wrap onto a balanced second row on narrow windows; previously a non-wrapping row of 240 px cards next to the action buttons showed only 1–2 of 4 cards on a 1366 px screen, and rows shorter than the cards cut off their bottom line. Used on Tồn kho, Nhập hàng, Công nợ NCC, Ca làm việc, Báo cáo, Nhật ký hệ thống, Tổng quan, Sao lưu, Thẻ kho, Sổ công nợ NCC, phiếu nhập hoàn thành and Lịch sử tích điểm.
+- KPI values shrink a size or two to fit a narrow card, and a card that still cannot show everything shows the full texts on hover.
+- Action buttons moved to their own wrapping row above the KPI cards; the Báo cáo and Nhật ký hệ thống filter bars wrap instead of hiding filters behind the buttons; the Ca làm việc header (badge, title, subtitle) flows with its real text width instead of fixed positions.
+- 13 new layout tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 440, Presentation 178 – all passing).
+
 ## 2026-11-18
 - **Tồn kho** moved to MVP: `Presentation.Inventory.InventoryPresenter` (permission, stock list + low-stock alerts loaded together with "latest wins", KPI cards via the tested `InventorySummary`, "Hiện SP ngừng kinh doanh" filter, Điều chỉnh F6 / Thẻ kho F7 / Kiểm kê F8 flows) and `StockAdjustmentPresenter` (header texts, reason list, live preview and its tone, target-balance warning, save). `InventoryScreen` (now a `BaseUserControl`, F5 reloads) and `StockAdjustmentDialog` are passive views resolved through DI.
 - After a saved stock adjustment the screen now confirms with a toast ("Đã điều chỉnh SP001 – Sữa tươi: −2 → tồn 8 hộp.") – a warning toast when the product ends under its minimum level; previously it reloaded silently.

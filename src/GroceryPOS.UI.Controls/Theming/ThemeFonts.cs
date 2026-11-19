@@ -18,6 +18,10 @@ public static class ThemeFonts
         return GetFont(typography.FontFamily, typography.SizeOf(role), style);
     }
 
+    /// <summary>The theme's text font family at an explicit size in points (e.g. a KPI value shrunk to fit).</summary>
+    public static Font GetSize(float size, FontStyle style = FontStyle.Regular) =>
+        GetFont(ThemeManager.Current.Typography.FontFamily, size, style);
+
     /// <summary>Icon font (Segoe Fluent Icons, falling back to Segoe MDL2 Assets) at the given size in points.</summary>
     public static Font Icon(float size)
     {

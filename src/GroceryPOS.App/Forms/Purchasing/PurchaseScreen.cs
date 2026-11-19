@@ -1,3 +1,4 @@
+using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Inventory;
@@ -58,18 +59,13 @@ internal sealed class PurchaseScreen : UserControl
         _debt = Stat("Ghi nợ NCC trong kỳ", Glyphs.Warning, BadgeKind.Warning);
         _count = Stat("Phiếu đã nhập", Glyphs.Document, BadgeKind.Success);
         _drafts = Stat("Phiếu tạm chưa nhập", Glyphs.Edit, BadgeKind.Info);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false };
-        stats.Controls.AddRange([_amount, _debt, _count, _drafts]);
+        var stats = new StatCardRow { Padding = new Padding(24, 0, 24, 0) };
+        stats.AddCards(_amount, _debt, _count, _drafts);
 
         var create = Action("Tạo phiếu (F2)", Glyphs.Add, ButtonVariant.Primary, () => NewReceiptAsync(withSuggestions: false));
         var suggested = Action("Nhập hàng sắp hết (F4)", Glyphs.Warning, ButtonVariant.Secondary, () => NewReceiptAsync(withSuggestions: true));
         var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAsync);
-        var actions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 24, 0, 0) };
-        actions.Controls.AddRange([create, suggested, refresh]);
-
-        var header = new Panel { Dock = DockStyle.Top, Height = 140, Padding = new Padding(24, 20, 24, 0) };
-        header.Controls.Add(stats);
-        header.Controls.Add(actions);
+        var actions = ScreenLayout.Toolbar(create, suggested, refresh);
 
         // ---- Filters + list -----------------------------------------------------------------------------
         var today = DateTime.Today;
@@ -141,7 +137,8 @@ internal sealed class PurchaseScreen : UserControl
         body.Controls.Add(card);
 
         Controls.Add(body);
-        Controls.Add(header);
+        Controls.Add(stats);
+        Controls.Add(actions);
 
         Load += async (_, _) => await ReloadAsync();
     }

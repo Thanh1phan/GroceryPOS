@@ -73,8 +73,8 @@ internal sealed class BackupScreen : UserControl
         _latest = Stat("Lần sao lưu gần nhất", Glyphs.History, BadgeKind.Primary);
         _count = Stat("Bản sao lưu đang giữ", Glyphs.Save, BadgeKind.Info);
         _database = Stat("Cơ sở dữ liệu", Glyphs.Settings, BadgeKind.Neutral);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 136, WrapContents = false, Padding = new Padding(24, 4, 24, 0) };
-        stats.Controls.AddRange([_latest, _count, _database]);
+        var stats = new StatCardRow { CardHeight = 120, MinCardWidth = 240, Padding = new Padding(24, 4, 24, 12) };
+        stats.AddCards(_latest, _count, _database);
 
         // ---- Backup list ----------------------------------------------------------------------------------
         _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Chưa có bản sao lưu nào. Bấm \"Sao lưu ngay\" để tạo bản đầu tiên.", SearchPlaceholder = "Tìm theo ngày, loại…" };

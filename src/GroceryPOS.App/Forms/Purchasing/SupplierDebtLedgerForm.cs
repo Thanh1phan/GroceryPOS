@@ -62,8 +62,8 @@ internal sealed class SupplierDebtLedgerForm : Form
         _increase = Stat("Phát sinh tăng", Glyphs.Add, BadgeKind.Warning);
         _decrease = Stat("Đã trả / cấn trừ", Glyphs.Money, BadgeKind.Success);
         _closing = Stat("Nợ cuối kỳ", Glyphs.Document, BadgeKind.Primary);
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, WrapContents = false, Padding = new Padding(0, 4, 0, 8) };
-        stats.Controls.AddRange([_opening, _increase, _decrease, _closing]);
+        var stats = new StatCardRow { Padding = new Padding(0, 4, 0, 12) };
+        stats.AddCards(_opening, _increase, _decrease, _closing);
 
         _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Không có phát sinh công nợ trong khoảng thời gian này.", PageSize = 50 };
         _grid.AddDateColumn(nameof(LedgerRow.Timestamp), "Thời gian", width: 140, withTime: true);

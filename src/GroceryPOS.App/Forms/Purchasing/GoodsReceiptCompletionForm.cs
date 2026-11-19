@@ -32,13 +32,12 @@ internal sealed class GoodsReceiptCompletionForm : Form
             Text = $"✓ Đã hoàn thành phiếu nhập {completion.Code} – {supplierName}",
         };
 
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 120, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
-        stats.Controls.AddRange([
+        var stats = new StatCardRow { Padding = new Padding(0, 8, 0, 12) };
+        stats.AddCards(
             Stat("Tổng tiền phiếu", Vnd.Format(completion.Total), Glyphs.Document, BadgeKind.Primary, $"{completion.Lines.Count} sản phẩm"),
             Stat("Đã trả NCC", Vnd.Format(completion.PaidAmount), Glyphs.Money, BadgeKind.Success, null),
             Stat("Ghi nợ phiếu này", Vnd.Format(completion.DebtAmount), Glyphs.Warning, completion.DebtAmount > 0 ? BadgeKind.Warning : BadgeKind.Neutral, null),
-            Stat("Công nợ NCC hiện tại", Vnd.Format(completion.SupplierDebtBalance), Glyphs.People, BadgeKind.Info, null),
-        ]);
+            Stat("Công nợ NCC hiện tại", Vnd.Format(completion.SupplierDebtBalance), Glyphs.People, BadgeKind.Info, null));
 
         var below = completion.BelowCostLines.ToList();
         var warning = new Label

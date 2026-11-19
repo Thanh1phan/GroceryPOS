@@ -78,8 +78,8 @@ internal sealed class DashboardScreen : UserControl
         _profit = Stat("Lợi nhuận gộp hôm nay", Glyphs.Chart, BadgeKind.Info);
         _shift = Stat("Ca của bạn", Glyphs.Calculator, BadgeKind.Warning);
         _shift.Visible = _canSeeShift;
-        var stats = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 140, WrapContents = false, Padding = new Padding(24, 4, 24, 0) };
-        stats.Controls.AddRange([_revenue, _invoices, _profit, _shift]);
+        var stats = new StatCardRow { Padding = new Padding(24, 4, 24, 12) };
+        stats.AddCards(_revenue, _invoices, _profit, _shift);
 
         // ---- Charts ---------------------------------------------------------------------------------
         _weekChart = new BarChart { Dock = DockStyle.Fill, ShowValues = true, EmptyText = "Chưa có doanh thu trong 7 ngày qua", TooltipFormatter = Vnd.Format };

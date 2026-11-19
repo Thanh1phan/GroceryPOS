@@ -64,9 +64,9 @@ internal sealed class ShiftScreen : UserControl
         Dock = DockStyle.Fill;
 
         // ---- Current shift card -------------------------------------------------------------------
-        _status = new ModernBadge { Location = new Point(0, 4) };
-        _title = new Label { AutoSize = true, Location = new Point(110, 0), Font = new Font(Font.FontFamily, 14, FontStyle.Bold) };
-        _subtitle = new Label { AutoSize = true, Location = new Point(0, 34) };
+        _status = new ModernBadge { Margin = new Padding(0, 6, 12, 0) };
+        _title = new Label { AutoSize = true, Margin = Padding.Empty, Font = new Font(Font.FontFamily, 14, FontStyle.Bold) };
+        _subtitle = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
 
         _open = Action("Mở ca", Glyphs.Add, ButtonVariant.Primary, async () => await OpenShiftAsync());
         _payIn = Action("Nộp tiền vào két", Glyphs.Money, ButtonVariant.Secondary, async () => await MoveCashAsync(CashMovementType.PayIn));
@@ -75,20 +75,22 @@ internal sealed class ShiftScreen : UserControl
         _close = Action("Kết ca", Glyphs.Lock, ButtonVariant.Danger, async () => await CloseOwnShiftAsync());
         var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, async () => await ReloadAsync());
 
-        var actions = new FlowLayoutPanel { Location = new Point(0, 64), AutoSize = true, WrapContents = false };
+        var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 12, 24, 4) };
         actions.Controls.AddRange([_open, _payIn, _payOut, _report, _close, refresh]);
 
         _revenue = Stat("Doanh thu thuần", Glyphs.Chart, BadgeKind.Success);
         _invoices = Stat("Hóa đơn", Glyphs.Document, BadgeKind.Primary);
         _cash = Stat("Tiền mặt trong két", Glyphs.Money, BadgeKind.Info);
         _nonCash = Stat("Chuyển khoản + thẻ", Glyphs.Calculator, BadgeKind.Neutral);
-        var stats = new FlowLayoutPanel { Location = new Point(0, 120), AutoSize = true, WrapContents = false };
-        stats.Controls.AddRange([_revenue, _invoices, _cash, _nonCash]);
+        var stats = new StatCardRow { Padding = new Padding(24, 4, 24, 8) };
+        stats.AddCards(_revenue, _invoices, _cash, _nonCash);
 
-        var currentPanel = new Panel { Dock = DockStyle.Top, Height = 260, Padding = new Padding(24, 20, 24, 0) };
-        var inner = new Panel { Dock = DockStyle.Fill };
-        inner.Controls.AddRange([_status, _title, _subtitle, actions, stats]);
-        currentPanel.Controls.Add(inner);
+        // Badge + title, then the subtitle, flow with their real text widths (a long title no longer overlaps
+        // the badge, and nothing below is pushed out of a fixed-height panel).
+        var heading = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 20, 24, 0) };
+        heading.Controls.AddRange([_status, _title]);
+        heading.SetFlowBreak(_title, true);
+        heading.Controls.Add(_subtitle);
 
         // ---- History ------------------------------------------------------------------------------
         var today = DateTime.Today;
@@ -133,14 +135,16 @@ internal sealed class ShiftScreen : UserControl
         historyHost.Controls.Add(historyCard);
 
         Controls.Add(historyHost);
-        Controls.Add(currentPanel);
+        Controls.Add(stats);
+        Controls.Add(actions);
+        Controls.Add(heading);
 
         Load += async (_, _) => await ReloadAsync();
     }
 
     private static ModernButton Action(string text, string glyph, ButtonVariant variant, Func<Task> onClick)
     {
-        var button = new ModernButton { Text = text, IconGlyph = glyph, Variant = variant, Size = new Size(text.Length > 12 ? 170 : 130, 40), Margin = new Padding(0, 0, 8, 0) };
+        var button = new ModernButton { Text = text, IconGlyph = glyph, Variant = variant, Size = new Size(text.Length > 12 ? 170 : 130, 40), Margin = new Padding(0, 0, 8, 8) };
         button.Click += async (_, _) => await onClick();
         return button;
     }
