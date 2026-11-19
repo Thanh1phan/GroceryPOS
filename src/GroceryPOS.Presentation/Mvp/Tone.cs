@@ -8,6 +8,9 @@ public enum Tone
 {
     Normal,
     Muted,
+
+    /// <summary>Informational accent (e.g. a draft that still needs finishing).</summary>
+    Info,
     Success,
     Warning,
     Danger,

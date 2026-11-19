@@ -200,7 +200,7 @@ public sealed class MainForm : Form
             "categories" => new CategoryListScreen(_services),
             "products" => new ProductListScreen(_services),
             "inventory" => new InventoryScreen(_services),
-            "purchases" => new PurchaseScreen(_scopeFactory, _currentUser),
+            "purchases" => new PurchaseScreen(_services),
             "customers" => new CustomerListScreen(_services),
             "suppliers" => new SupplierListScreen(_services),
             "supplier-debt" => new SupplierDebtScreen(_scopeFactory, _currentUser),

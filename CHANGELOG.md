@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-19 (2)
+- **Nhập hàng** moved to MVP: `Presentation.Purchasing.PurchasePresenter` (period/status/supplier filters passed as `PurchaseFilter`, KPI cards via the tested `PurchaseSummary`, Tạo phiếu F2 / Nhập hàng sắp hết F4 with the filtered supplier pre-selected, open a draft in the editor or a posted receipt read-only, Hủy phiếu tạm with a reason). `PurchaseScreen` is now a passive `BaseUserControl` view resolved through DI; row colors come from `PurchaseReceiptRow` tones (new `Tone.Info`).
+- Fixes: a slow list load could overwrite a newer filter (now "latest wins"); a failed supplier list silently emptied the supplier filter and zeroed the total debt – it now shows an error toast and keeps the filter; a failed draft count showed "0" – it now shows "–" with "Không tải được phiếu tạm"; failed reorder suggestions were ignored – now reported, and a blank receipt still opens.
+- Cancelling a draft now confirms with a toast ("Đã hủy phiếu tạm PN…"); opening a draft that was completed or cancelled on another machine shows it read-only and refreshes the stale list.
+- 31 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 440, Presentation 209 – all passing).
+
 ## 2026-11-19
 - **Layout fixes for cut-off text and missing cards** (reported on a 100 % display): buttons now grow to fit their icon + caption instead of ending in "…" (`ModernButton.AutoFitWidth`, content-based `GetPreferredSize`, also fixing `AutoSize` buttons that ignored the icon and padding).
 - New `StatCardRow`: KPI cards share the width equally and wrap onto a balanced second row on narrow windows; previously a non-wrapping row of 240 px cards next to the action buttons showed only 1–2 of 4 cards on a 1366 px screen, and rows shorter than the cards cut off their bottom line. Used on Tồn kho, Nhập hàng, Công nợ NCC, Ca làm việc, Báo cáo, Nhật ký hệ thống, Tổng quan, Sao lưu, Thẻ kho, Sổ công nợ NCC, phiếu nhập hoàn thành and Lịch sử tích điểm.
