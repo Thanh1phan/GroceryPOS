@@ -1,14 +1,12 @@
-using GroceryPOS.App.Forms.Pos;
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Shifts;
-using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Shifts;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Shifts;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -21,13 +19,13 @@ namespace GroceryPOS.App.Forms.Shifts;
 /// Ca làm việc: the signed-in user's drawer (open shift, live KPIs, pay-in/out, mid-shift report, close with count sheet)
 /// above the shift history. Supervisors (<c>shifts.supervise</c>) see everyone's shifts and can close another cashier's
 /// open shift ("Kết ca hộ"); cashiers only see their own.
+/// Passive MVP view – the logic lives in <see cref="ShiftPresenter"/>.
 /// </summary>
-internal sealed class ShiftScreen : UserControl
+internal sealed class ShiftScreen : BaseUserControl, IShiftView
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ICurrentUser _currentUser;
+    private readonly ShiftPresenter _presenter;
     private readonly SalesOptions _options;
-    private readonly bool _canSupervise;
 
     private readonly ModernBadge _status;
     private readonly Label _title;
@@ -49,31 +47,25 @@ internal sealed class ShiftScreen : UserControl
     private readonly ModernButton _viewReport;
     private readonly ModernButton _closeForOther;
 
-    private CurrentShiftDto? _current;
-
-    public ShiftScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public ShiftScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _currentUser = currentUser;
-        _canSupervise = currentUser.HasPermission(Permissions.ShiftsSupervise);
-        using (var scope = scopeFactory.CreateScope())
-        {
-            _options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
-        }
-
-        Dock = DockStyle.Fill;
+        _scopeFactory = services.GetRequiredService<IServiceScopeFactory>();
+        _options = services.GetService<SalesOptions>() ?? SalesOptions.Default;
+        _presenter = services.GetRequiredService<ShiftPresenter>();
+        _presenter.Attach(this);
 
         // ---- Current shift card -------------------------------------------------------------------
         _status = new ModernBadge { Margin = new Padding(0, 6, 12, 0) };
-        _title = new Label { AutoSize = true, Margin = Padding.Empty, Font = new Font(Font.FontFamily, 14, FontStyle.Bold) };
-        _subtitle = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 0) };
+        _title = new Label { AutoSize = true, Margin = Padding.Empty, Font = new Font(Font.FontFamily, 14, FontStyle.Bold), Text = "Ca làm việc" };
+        _subtitle = new Label { AutoSize = true, Margin = new Padding(0, 4, 0, 0), Text = "Đang tải…" };
 
-        _open = Action("Mở ca", Glyphs.Add, ButtonVariant.Primary, async () => await OpenShiftAsync());
-        _payIn = Action("Nộp tiền vào két", Glyphs.Money, ButtonVariant.Secondary, async () => await MoveCashAsync(CashMovementType.PayIn));
-        _payOut = Action("Chi tiền", Glyphs.Money, ButtonVariant.Secondary, async () => await MoveCashAsync(CashMovementType.PayOut));
-        _report = Action("Báo cáo giữa ca", Glyphs.Print, ButtonVariant.Secondary, async () => await ShowCurrentReportAsync());
-        _close = Action("Kết ca", Glyphs.Lock, ButtonVariant.Danger, async () => await CloseOwnShiftAsync());
-        var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, async () => await ReloadAsync());
+        _open = Action("Mở ca", Glyphs.Add, ButtonVariant.Primary, _presenter.OpenShiftAsync);
+        _payIn = Action("Nộp tiền vào két", Glyphs.Money, ButtonVariant.Secondary, () => _presenter.MoveCashAsync(CashMovementType.PayIn));
+        _payOut = Action("Chi tiền", Glyphs.Money, ButtonVariant.Secondary, () => _presenter.MoveCashAsync(CashMovementType.PayOut));
+        _report = Action("Báo cáo giữa ca", Glyphs.Print, ButtonVariant.Secondary, _presenter.ShowCurrentReportAsync);
+        _close = Action("Kết ca", Glyphs.Lock, ButtonVariant.Danger, _presenter.CloseOwnShiftAsync);
+        var refresh = Action("Làm mới", Glyphs.Refresh, ButtonVariant.Ghost, RefreshDataAsync);
+        _open.Visible = _payIn.Visible = _payOut.Visible = _report.Visible = _close.Visible = false;
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 12, 24, 4) };
         actions.Controls.AddRange([_open, _payIn, _payOut, _report, _close, refresh]);
@@ -85,23 +77,22 @@ internal sealed class ShiftScreen : UserControl
         var stats = new StatCardRow { Padding = new Padding(24, 4, 24, 8) };
         stats.AddCards(_revenue, _invoices, _cash, _nonCash);
 
-        // Badge + title, then the subtitle, flow with their real text widths (a long title no longer overlaps
-        // the badge, and nothing below is pushed out of a fixed-height panel).
+        // Badge + title, then the subtitle, flow with their real text widths.
         var heading = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 20, 24, 0) };
         heading.Controls.AddRange([_status, _title]);
         heading.SetFlowBreak(_title, true);
         heading.Controls.Add(_subtitle);
 
         // ---- History ------------------------------------------------------------------------------
-        var today = DateTime.Today;
-        _from = new ModernDatePicker { Width = 150, Value = today.AddDays(-6), ReserveMessageSpace = false };
-        _to = new ModernDatePicker { Width = 150, Value = today, ReserveMessageSpace = false };
-        _from.ValueChanged += async (_, _) => await ReloadHistoryAsync();
-        _to.ValueChanged += async (_, _) => await ReloadHistoryAsync();
+        var period = ShiftHistoryFilter.LastSevenDays(DateTime.Today);
+        _from = new ModernDatePicker { Width = 150, Value = period.From, ReserveMessageSpace = false };
+        _to = new ModernDatePicker { Width = 150, Value = period.To, ReserveMessageSpace = false };
+        _from.ValueChanged += async (_, _) => await FilterChangedAsync();
+        _to.ValueChanged += async (_, _) => await FilterChangedAsync();
         _onlyOpen = new CheckBox { Text = "Chỉ ca đang mở", AutoSize = true, Margin = new Padding(8, 12, 8, 0) };
-        _onlyOpen.CheckedChanged += async (_, _) => await ReloadHistoryAsync();
+        _onlyOpen.CheckedChanged += async (_, _) => await FilterChangedAsync();
 
-        _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Không có ca nào trong khoảng thời gian này." };
+        _grid = new ModernDataGrid { Dock = DockStyle.Fill, EmptyText = "Không có ca nào trong khoảng thời gian này.", SearchPlaceholder = "Tìm mã ca, thu ngân…" };
         _grid.AddTextColumn(nameof(ShiftRow.Code), "Mã ca", width: 130);
         _grid.AddTextColumn(nameof(ShiftRow.UserName), "Thu ngân");
         _grid.AddTextColumn(nameof(ShiftRow.StatusName), "Trạng thái", width: 110);
@@ -109,19 +100,14 @@ internal sealed class ShiftScreen : UserControl
         _grid.AddDateColumn(nameof(ShiftRow.ClosedAt), "Kết ca", withTime: true);
         _grid.AddMoneyColumn(nameof(ShiftRow.NetRevenue), "Doanh thu thuần", width: 150);
         _grid.AddMoneyColumn(nameof(ShiftRow.Variance), "Chênh lệch", width: 130);
-        _grid.RowActivated += async (_, e) => await ShowReportAsync(((ShiftRow)e.Item).ShiftId);
+        _grid.RowActivated += async (_, e) => await _presenter.ShowReportAsync((ShiftRow)e.Item);
         _grid.SelectionChanged += (_, _) => UpdateHistoryButtons();
+        _grid.InnerGrid.CellFormatting += OnCellFormatting;
 
-        _viewReport = new ModernButton { Text = "Xem báo cáo", Variant = ButtonVariant.Secondary, IconGlyph = Glyphs.Print, Enabled = false };
-        _viewReport.Click += async (_, _) =>
-        {
-            if (_grid.GetSelected<ShiftRow>() is { } row)
-            {
-                await ShowReportAsync(row.ShiftId);
-            }
-        };
-        _closeForOther = new ModernButton { Text = "Kết ca hộ", Variant = ButtonVariant.Secondary, Enabled = false, Visible = _canSupervise };
-        _closeForOther.Click += async (_, _) => await CloseSelectedForOtherAsync();
+        _viewReport = new ModernButton { Text = "Xem báo cáo", Variant = ButtonVariant.Secondary, IconGlyph = Glyphs.Print, Enabled = false, Margin = new Padding(8, 0, 0, 0) };
+        _viewReport.Click += async (_, _) => await _presenter.ShowReportAsync(Selected);
+        _closeForOther = new ModernButton { Text = "Kết ca hộ", Variant = ButtonVariant.Secondary, IconGlyph = Glyphs.Lock, Enabled = false, Visible = _presenter.CanSupervise, Margin = new Padding(8, 0, 0, 0) };
+        _closeForOther.Click += async (_, _) => await _presenter.CloseForOtherAsync(Selected);
 
         _grid.ToolbarItems.Controls.AddRange([
             new Label { Text = "Từ", AutoSize = true, Margin = new Padding(0, 12, 4, 0) }, _from,
@@ -129,7 +115,7 @@ internal sealed class ShiftScreen : UserControl
             _onlyOpen, _viewReport, _closeForOther,
         ]);
 
-        var historyCard = new ModernCard { Dock = DockStyle.Fill, Title = _canSupervise ? "Lịch sử ca (tất cả nhân viên)" : "Lịch sử ca của bạn" };
+        var historyCard = new ModernCard { Dock = DockStyle.Fill, Title = _presenter.HistoryTitle };
         historyCard.Controls.Add(_grid);
         var historyHost = new Panel { Dock = DockStyle.Fill, Padding = new Padding(24, 8, 24, 24) };
         historyHost.Controls.Add(historyCard);
@@ -138,13 +124,17 @@ internal sealed class ShiftScreen : UserControl
         Controls.Add(stats);
         Controls.Add(actions);
         Controls.Add(heading);
-
-        Load += async (_, _) => await ReloadAsync();
     }
+
+    bool IView.IsAlive => IsAlive;
+
+    private ShiftRow? Selected => _grid.GetSelected<ShiftRow>();
+
+    public override Task RefreshDataAsync() => _presenter.LoadAsync(CurrentFilter());
 
     private static ModernButton Action(string text, string glyph, ButtonVariant variant, Func<Task> onClick)
     {
-        var button = new ModernButton { Text = text, IconGlyph = glyph, Variant = variant, Size = new Size(text.Length > 12 ? 170 : 130, 40), Margin = new Padding(0, 0, 8, 8) };
+        var button = new ModernButton { Text = text, IconGlyph = glyph, Variant = variant, AutoSize = true, Height = 40, Margin = new Padding(0, 0, 8, 8) };
         button.Click += async (_, _) => await onClick();
         return button;
     }
@@ -158,218 +148,116 @@ internal sealed class ShiftScreen : UserControl
         Margin = new Padding(0, 0, 16, 0),
     };
 
-    private async Task ReloadAsync()
-    {
-        await ReloadCurrentAsync();
-        await ReloadHistoryAsync();
-    }
+    private ShiftHistoryFilter CurrentFilter() => new(_from.Value, _to.Value, _onlyOpen.Checked);
 
-    private async Task ReloadCurrentAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            _title.Text = "Không tải được ca làm việc";
-            _subtitle.Text = result.Error.Message;
-            return;
-        }
-
-        _current = result.Value;
-        RenderCurrent();
-    }
-
-    private void RenderCurrent()
-    {
-        var shift = _current?.Current;
-        var isOpen = shift is not null;
-        _open.Visible = !isOpen;
-        _payIn.Visible = _payOut.Visible = _report.Visible = _close.Visible = isOpen;
-
-        if (shift is null)
-        {
-            _status.Set("Chưa mở ca", BadgeKind.Neutral);
-            _title.Text = "Bạn chưa mở ca";
-            _subtitle.Text = _current is { SuggestedOpeningFloat: > 0 } c
-                ? $"Ca trước để lại két {Vnd.Format(c.SuggestedOpeningFloat)}. Mở ca để bắt đầu bán hàng."
-                : "Mở ca để bắt đầu bán hàng.";
-            foreach (var card in new[] { _revenue, _invoices, _cash, _nonCash })
-            {
-                card.Value = "–";
-                card.Note = null;
-            }
-
-            return;
-        }
-
-        var totals = shift.Totals;
-        _status.Set("Đang mở", BadgeKind.Info);
-        _title.Text = $"Ca {shift.Code}";
-        _subtitle.Text = $"{shift.UserName} · mở lúc {StoreTime(shift.OpenedAt).ToString("HH:mm dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture)} · tiền đầu ca {Vnd.Format(shift.OpeningFloat)}";
-        _revenue.Value = Vnd.Format(totals.NetRevenue);
-        _revenue.Note = totals.DiscountTotal > 0 ? $"Đã giảm giá {Vnd.Format(totals.DiscountTotal)}" : null;
-        _invoices.Value = totals.SalesCount.ToString("#,0", Vnd.Culture);
-        _invoices.Note = totals.VoidCount + totals.ReturnCount > 0 ? $"{totals.VoidCount} hủy · {totals.ReturnCount} trả hàng" : null;
-        _cash.Value = Vnd.Format(shift.ExpectedCash);
-        _cash.Note = shift.PayInTotal + shift.PayOutTotal > 0
-            ? $"Nộp {Vnd.FormatNumber(shift.PayInTotal)} · chi {Vnd.FormatNumber(shift.PayOutTotal)}"
-            : null;
-        _nonCash.Value = Vnd.Format(totals.TransferSales + totals.CardSales);
-        _nonCash.Note = $"CK {Vnd.FormatNumber(totals.TransferSales)} · thẻ {Vnd.FormatNumber(totals.CardSales)}";
-    }
-
-    private async Task ReloadHistoryAsync()
-    {
-        var from = _from.Value?.Date ?? DateTime.Today.AddDays(-6);
-        var to = (_to.Value?.Date ?? DateTime.Today).AddDays(1);
-        var filter = new ShiftFilter(
-            From: new DateTimeOffset(from, _options.StoreUtcOffset),
-            To: new DateTimeOffset(to, _options.StoreUtcOffset),
-            Status: _onlyOpen.Checked ? ShiftStatus.Open : null);
-
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().ListAsync(filter);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsSuccess)
-        {
-            _grid.SetItems(result.Value.Select(s => new ShiftRow(
-                s.ShiftId,
-                s.Code,
-                s.UserId,
-                s.UserName ?? $"#{s.UserId}",
-                s.Status,
-                s.StatusName,
-                StoreTime(s.OpenedAt),
-                s.ClosedAt is { } closed ? StoreTime(closed) : null,
-                s.NetRevenue,
-                s.Variance)).ToList());
-        }
-
-        UpdateHistoryButtons();
-    }
+    private Task FilterChangedAsync() => _presenter.FilterAsync(CurrentFilter());
 
     private void UpdateHistoryButtons()
     {
-        var row = _grid.GetSelected<ShiftRow>();
-        _viewReport.Enabled = row is not null;
-        _closeForOther.Enabled = _canSupervise && row is { Status: ShiftStatus.Open } && row.UserId != _currentUser.Session?.UserId;
+        var row = Selected;
+        _viewReport.Enabled = _presenter.CanViewReport(row);
+        _closeForOther.Enabled = _presenter.CanCloseForOther(row);
     }
 
-    private DateTime StoreTime(DateTimeOffset value) => value.ToOffset(_options.StoreUtcOffset).DateTime;
-
-    private async Task OpenShiftAsync()
+    private static BadgeKind BadgeFor(Tone tone) => tone switch
     {
-        using var dialog = new OpenShiftDialog(_scopeFactory, _current?.SuggestedOpeningFloat ?? 0, _currentUser.Session?.FullName);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            await ReloadAsync();
-        }
-    }
+        Tone.Info => BadgeKind.Info,
+        Tone.Success => BadgeKind.Success,
+        Tone.Warning => BadgeKind.Warning,
+        Tone.Danger => BadgeKind.Danger,
+        _ => BadgeKind.Neutral,
+    };
 
-    private async Task MoveCashAsync(CashMovementType type)
+    private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
-        await ReloadCurrentAsync(); // fresh drawer amount for the pay-out check
-        if (_current?.Current is not { } shift)
+        if (e.RowIndex < 0 || _grid.InnerGrid.Rows[e.RowIndex].Tag is not ShiftRow row || e.CellStyle is not { } style)
         {
             return;
         }
 
+        var tone = _grid.Columns[e.ColumnIndex].DataPropertyName switch
+        {
+            nameof(ShiftRow.StatusName) => row.StatusTone,
+            nameof(ShiftRow.Variance) => row.VarianceTone,
+            _ => Tone.Normal,
+        };
+        var colors = ThemeManager.Current.Colors;
+        style.ForeColor = tone switch
+        {
+            Tone.Muted => colors.TextMuted,
+            Tone.Info => colors.Info,
+            Tone.Warning => colors.Warning,
+            Tone.Danger => colors.Danger,
+            Tone.Success => colors.Success,
+            _ => style.ForeColor,
+        };
+    }
+
+    void IShiftView.ShowCurrent(CurrentShiftState state)
+    {
+        _status.Set(state.BadgeText, BadgeFor(state.BadgeTone));
+        _title.Text = state.Title;
+        _subtitle.Text = state.Subtitle;
+        _open.Visible = state.CanOpen;
+        _payIn.Visible = _payOut.Visible = _report.Visible = _close.Visible = state.IsOpen;
+        Fill(_revenue, state.Revenue);
+        Fill(_invoices, state.Invoices);
+        Fill(_cash, state.Cash);
+        Fill(_nonCash, state.NonCash);
+
+        static void Fill(StatCard card, ShiftCard value)
+        {
+            card.Value = value.Value;
+            card.Note = value.Note;
+        }
+    }
+
+    void IShiftView.ShowHistory(IReadOnlyList<ShiftRow> rows)
+    {
+        _grid.SetItems(rows);
+        UpdateHistoryButtons();
+    }
+
+    void IShiftView.ShowPeriodError(string? message)
+    {
+        if (message is null)
+        {
+            _from.ClearValidation();
+        }
+        else
+        {
+            _from.SetError(message);
+        }
+    }
+
+    ShiftSummaryDto? IShiftView.OpenShift(decimal suggestedFloat, string? cashierName)
+    {
+        using var dialog = new OpenShiftDialog(_scopeFactory, suggestedFloat, cashierName);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Opened : null;
+    }
+
+    ShiftSummaryDto? IShiftView.RecordCashMovement(ShiftSummaryDto shift, CashMovementType type)
+    {
         using var dialog = new CashMovementDialog(_scopeFactory, shift, type);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            await ReloadCurrentAsync();
-        }
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Updated : null;
     }
 
-    private async Task ShowCurrentReportAsync()
-    {
-        await ReloadCurrentAsync();
-        if (_current?.Current is { } shift)
-        {
-            ShiftReportViewer.Show(this, _scopeFactory, shift);
-        }
-    }
-
-    private async Task CloseOwnShiftAsync()
-    {
-        await ReloadCurrentAsync();
-        if (_current?.Current is { } shift)
-        {
-            await CloseAsync(shift, closingForSomeoneElse: false);
-        }
-    }
-
-    private async Task CloseSelectedForOtherAsync()
-    {
-        if (_grid.GetSelected<ShiftRow>() is not { Status: ShiftStatus.Open } row)
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetSummaryAsync(row.ShiftId);
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, "Kết ca hộ", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        await CloseAsync(result.Value, closingForSomeoneElse: true);
-    }
-
-    private async Task CloseAsync(ShiftSummaryDto shift, bool closingForSomeoneElse)
+    ShiftSummaryDto? IShiftView.CloseShift(ShiftSummaryDto shift, bool closingForSomeoneElse)
     {
         using var dialog = new CloseShiftDialog(_scopeFactory, shift, _options, closingForSomeoneElse);
-        if (dialog.ShowDialog(this) != DialogResult.OK || dialog.ClosedShift is not { } closed)
-        {
-            return;
-        }
-
-        await ReloadAsync();
-        if (ModernDialog.Show(this, $"Đã kết ca {closed.Code}. In báo cáo kết ca?", "Kết ca", MessageBoxButtons.YesNo, MessageBoxIcon.Information)
-            == DialogResult.Yes)
-        {
-            ShiftReportViewer.Show(this, _scopeFactory, closed);
-        }
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.ClosedShift : null;
     }
 
-    private async Task ShowReportAsync(int shiftId)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetSummaryAsync(shiftId);
-        if (IsDisposed)
-        {
-            return;
-        }
+    void IShiftView.ShowReport(ShiftSummaryDto shift) => ShiftReportViewer.Show(this, _scopeFactory, shift);
 
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, "Báo cáo ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-        ShiftReportViewer.Show(this, _scopeFactory, result.Value);
-    }
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
 
-    /// <summary>Grid row with times already in store time.</summary>
-    private sealed record ShiftRow(
-        int ShiftId,
-        string Code,
-        int UserId,
-        string UserName,
-        ShiftStatus Status,
-        string StatusName,
-        DateTime OpenedAt,
-        DateTime? ClosedAt,
-        decimal? NetRevenue,
-        decimal? Variance);
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, cancelText: "Không", danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 }

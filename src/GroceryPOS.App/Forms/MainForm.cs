@@ -206,7 +206,7 @@ public sealed class MainForm : Form
             "supplier-debt" => new SupplierDebtScreen(_scopeFactory, _currentUser),
             "users" => new UserListScreen(_services),
             "roles" => new RolePermissionScreen(_services),
-            "shifts" => new ShiftScreen(_scopeFactory, _currentUser),
+            "shifts" => new ShiftScreen(_services),
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
             "settings" => new SettingsScreen(_scopeFactory),

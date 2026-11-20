@@ -5,6 +5,7 @@ using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
+using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
 using GroceryPOS.Application.Validation;
 using GroceryPOS.Presentation;
@@ -229,6 +230,9 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IInventoryService>(sp => sp.GetRequiredService<FakeInventoryService>());
         services.AddSingleton(Receipts);
         services.AddScoped<IGoodsReceiptService>(sp => sp.GetRequiredService<FakeGoodsReceiptService>());
+        services.AddSingleton(Shifts);
+        services.AddScoped<IShiftService>(sp => sp.GetRequiredService<FakeShiftService>());
+        services.AddSingleton<TimeProvider>(Clock);
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
     }
@@ -250,6 +254,10 @@ internal sealed class TestHost : IDisposable
     public FakeInventoryService Inventory { get; } = new();
 
     public FakeGoodsReceiptService Receipts { get; } = new();
+
+    public FakeShiftService Shifts { get; } = new();
+
+    public FixedClock Clock { get; } = new();
 
     public ServiceProvider Provider { get; }
 

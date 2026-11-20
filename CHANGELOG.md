@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-20
+- **Ca làm việc** moved to MVP: `Presentation.Shifts.ShiftPresenter` (own drawer: Mở ca, Nộp tiền / Chi tiền, Báo cáo giữa ca, Kết ca; history with date range and "Chỉ ca đang mở" and "latest wins" loading; Kết ca hộ and report of any row for supervisors). The header (badge, title, subtitle, four KPI cards, which buttons show) is computed by the tested `CurrentShiftState`; `ShiftScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- Every drawer action re-reads the shift first: if it was closed elsewhere (e.g. a supervisor's Kết ca hộ) the screen says "Ca của bạn không còn mở…" and refreshes instead of silently doing nothing; Mở ca shows the shift opened meanwhile from the POS screen instead of opening the dialog; Kết ca hộ on a shift already closed by someone else says so and refreshes the list.
+- New feedback: toasts after opening a shift ("Đã mở ca … với tiền đầu ca …") and after a pay-in/out ("Đã chi 50.000 ₫ (Trả tiền giao hàng). Tiền mặt trong két: …"); the "In báo cáo kết ca?" question now states the cash variance (Thiếu / Thừa / khớp); the Chênh lệch column is red when cash was missing, amber when over, green when it matched; a shift open for 12 hours or more gets an amber "Mở quá lâu" badge with a reminder.
+- Fixes: a failed history load was silently ignored (now an error toast, the rows stay); an inverted date range searched anyway (now marks the "Từ" date); a failed current-shift load left the old buttons visible (now only Làm mới).
+- 24 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 440, Presentation 233 – all passing).
+
 ## 2026-11-19 (2)
 - **Nhập hàng** moved to MVP: `Presentation.Purchasing.PurchasePresenter` (period/status/supplier filters passed as `PurchaseFilter`, KPI cards via the tested `PurchaseSummary`, Tạo phiếu F2 / Nhập hàng sắp hết F4 with the filtered supplier pre-selected, open a draft in the editor or a posted receipt read-only, Hủy phiếu tạm with a reason). `PurchaseScreen` is now a passive `BaseUserControl` view resolved through DI; row colors come from `PurchaseReceiptRow` tones (new `Tone.Info`).
 - Fixes: a slow list load could overwrite a newer filter (now "latest wins"); a failed supplier list silently emptied the supplier filter and zeroed the total debt – it now shows an error toast and keeps the filter; a failed draft count showed "0" – it now shows "–" with "Không tải được phiếu tạm"; failed reorder suggestions were ignored – now reported, and a blank receipt still opens.
