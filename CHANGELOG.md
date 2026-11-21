@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-21
+- **Công nợ NCC** moved to MVP: `Presentation.Purchasing.SupplierDebtPresenter` (payables list, payments and supplier returns of a period with "latest wins" loading, Thanh toán F6, Sổ công nợ F7, Trả hàng NCC F8, Hủy phiếu chi with a required reason, open a posted return). KPI cards come from the tested `SupplierDebtSummary`; rows are `SupplierPaymentRow` / `SupplierReturnRow` with tones. `SupplierDebtScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- Thanh toán re-reads the supplier's debt before opening the dialog: the dialog starts from the current balance (not the one shown when the list loaded), and a supplier already settled on another machine gets "… không còn công nợ" and a refreshed list instead of a payment that would fail.
+- New feedback: a toast after cancelling a payment ("Đã hủy phiếu chi PC… Công nợ với … tăng lại …") and after a supplier return (value, debt offset / refund, remaining debt); a failed cancel refreshes the stale list.
+- Fixes: a failed payables load blocked the payments and returns from loading (now an error toast, documents still load, the card shows "–"); a failed returns load silently showed "–" (now reported); "Nợ lớn nhất" relied on the list order; a slow period change could overwrite a newer one.
+- 26 new presenter tests (Domain 149, Application 486, Infrastructure 63, UI.Controls 440, Presentation 259 – all passing).
+
 ## 2026-11-20
 - **Ca làm việc** moved to MVP: `Presentation.Shifts.ShiftPresenter` (own drawer: Mở ca, Nộp tiền / Chi tiền, Báo cáo giữa ca, Kết ca; history with date range and "Chỉ ca đang mở" and "latest wins" loading; Kết ca hộ and report of any row for supervisors). The header (badge, title, subtitle, four KPI cards, which buttons show) is computed by the tested `CurrentShiftState`; `ShiftScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - Every drawer action re-reads the shift first: if it was closed elsewhere (e.g. a supervisor's Kết ca hộ) the screen says "Ca của bạn không còn mở…" and refreshes instead of silently doing nothing; Mở ca shows the shift opened meanwhile from the POS screen instead of opening the dialog; Kết ca hộ on a shift already closed by someone else says so and refreshes the list.

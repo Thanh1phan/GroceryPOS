@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.AddTransient<InventoryPresenter>();
         services.AddTransient<StockAdjustmentPresenter>();
         services.AddTransient<PurchasePresenter>();
+        services.AddTransient<SupplierDebtPresenter>();
         services.AddTransient<ShiftPresenter>();
         return services;
     }

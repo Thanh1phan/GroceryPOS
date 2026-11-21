@@ -230,6 +230,10 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IInventoryService>(sp => sp.GetRequiredService<FakeInventoryService>());
         services.AddSingleton(Receipts);
         services.AddScoped<IGoodsReceiptService>(sp => sp.GetRequiredService<FakeGoodsReceiptService>());
+        services.AddSingleton(SupplierPayments);
+        services.AddScoped<ISupplierPaymentService>(sp => sp.GetRequiredService<FakeSupplierPaymentService>());
+        services.AddSingleton(SupplierReturns);
+        services.AddScoped<ISupplierReturnService>(sp => sp.GetRequiredService<FakeSupplierReturnService>());
         services.AddSingleton(Shifts);
         services.AddScoped<IShiftService>(sp => sp.GetRequiredService<FakeShiftService>());
         services.AddSingleton<TimeProvider>(Clock);
@@ -256,6 +260,10 @@ internal sealed class TestHost : IDisposable
     public FakeGoodsReceiptService Receipts { get; } = new();
 
     public FakeShiftService Shifts { get; } = new();
+
+    public FakeSupplierPaymentService SupplierPayments { get; } = new();
+
+    public FakeSupplierReturnService SupplierReturns { get; } = new();
 
     public FixedClock Clock { get; } = new();
 

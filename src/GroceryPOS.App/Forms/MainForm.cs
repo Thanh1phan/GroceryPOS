@@ -203,7 +203,7 @@ public sealed class MainForm : Form
             "purchases" => new PurchaseScreen(_services),
             "customers" => new CustomerListScreen(_services),
             "suppliers" => new SupplierListScreen(_services),
-            "supplier-debt" => new SupplierDebtScreen(_scopeFactory, _currentUser),
+            "supplier-debt" => new SupplierDebtScreen(_services),
             "users" => new UserListScreen(_services),
             "roles" => new RolePermissionScreen(_services),
             "shifts" => new ShiftScreen(_services),
