@@ -128,7 +128,43 @@ public class StoreSettingsCodecTests
         Assert.Equal(2, StoreSettings.FooterLineCount(normalized.ReceiptFooter));
         Assert.Equal(0, StoreSettings.FooterLineCount("  "));
     }
+
+    [Fact]
+    public void Merge_keeps_changes_saved_elsewhere_to_fields_this_user_did_not_touch()
+    {
+        var mine = Custom with { StoreName = "Tạp hóa Cô Ba 2", Address = null };
+        var theirs = Custom with { VndPerPoint = 10_000, ReturnWindowDays = 7 };
+
+        var merge = StoreSettingsCodec.Merge(Custom, mine, theirs);
+
+        Assert.Equal(Custom with { StoreName = "Tạp hóa Cô Ba 2", Address = null, VndPerPoint = 10_000, ReturnWindowDays = 7 }, merge.Settings);
+        Assert.True(merge.ChangedElsewhere);
+        Assert.Equal(new[] { StoreSettingsCodec.Keys.VndPerPoint, StoreSettingsCodec.Keys.ReturnWindowDays }, merge.Kept.Select(c => c.Key));
+        Assert.Empty(merge.Overridden);
+    }
+
+    [Fact]
+    public void Merge_lets_this_users_edit_win_a_conflict_and_reports_it()
+    {
+        var mine = Custom with { PointValueVnd = 500 };
+        var theirs = Custom with { PointValueVnd = 100 };
+        var same = Custom with { ReturnWindowDays = 5 };
+
+        var conflict = StoreSettingsCodec.Merge(Custom, mine, theirs);
+        var identical = StoreSettingsCodec.Merge(Custom, same, same);
+        var untouched = StoreSettingsCodec.Merge(Custom, mine, Custom);
+
+        Assert.Equal(500, conflict.Settings.PointValueVnd);
+        var overridden = Assert.Single(conflict.Overridden);
+        Assert.Equal("Giá trị 1 điểm khi đổi: 100 ₫ → 500 ₫", overridden.ToString());
+        Assert.Empty(conflict.Kept);
+        Assert.False(identical.ChangedElsewhere);
+        Assert.Equal(same, identical.Settings);
+        Assert.False(untouched.ChangedElsewhere);
+        Assert.Equal(mine, untouched.Settings);
+    }
 }
+
 
 public class StoreSettingsValidatorTests
 {

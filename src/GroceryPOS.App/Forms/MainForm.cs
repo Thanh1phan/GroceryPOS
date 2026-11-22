@@ -209,7 +209,7 @@ public sealed class MainForm : Form
             "shifts" => new ShiftScreen(_services),
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
-            "settings" => new SettingsScreen(_scopeFactory),
+            "settings" => new SettingsScreen(_services),
             "backup" => new BackupScreen(_scopeFactory),
             _ => BuildPlaceholder(title),
         };

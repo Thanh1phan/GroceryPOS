@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-22
+- **Cấu hình** moved to MVP: `Presentation.Settings.SettingsPresenter` (load, live state while editing, Hoàn tác, Khôi phục mặc định, save after listing the changes, print preview of the sample receipt). Validation marks, footer counter, loyalty explanation, warnings, the live receipt and the status badge come from the tested `SettingsFormState`; `SettingsScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- **Saving no longer reverts another counter's changes**: the screen used to save its whole (possibly stale) copy, so a loyalty change saved on counter A was silently undone when counter B saved a new phone number. Saving now re-reads the stored settings and merges (`StoreSettingsCodec.Merge`): untouched fields keep the other counter's values (mentioned in the success toast), and a field both changed asks "Ghi đè bằng giá trị của bạn?" – declining loads their value and keeps your other edits on screen.
+- Unsaved settings are no longer lost when switching menu items, signing out, closing the window or pressing F5: the screen asks "Có N thay đổi cấu hình chưa lưu. Bỏ các thay đổi này?".
+- F5 now reloads the settings (a failed reload shows an error toast and keeps the loaded values); a rejected save opens the tab of the first invalid field and focuses it; the badge shows "Đang lưu…" and Lưu/Hoàn tác are off while saving.
+- 20 new tests (Domain 149, Application 488, Infrastructure 63, UI.Controls 440, Presentation 277 – all passing).
+
 ## 2026-11-21
 - **Công nợ NCC** moved to MVP: `Presentation.Purchasing.SupplierDebtPresenter` (payables list, payments and supplier returns of a period with "latest wins" loading, Thanh toán F6, Sổ công nợ F7, Trả hàng NCC F8, Hủy phiếu chi with a required reason, open a posted return). KPI cards come from the tested `SupplierDebtSummary`; rows are `SupplierPaymentRow` / `SupplierReturnRow` with tones. `SupplierDebtScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - Thanh toán re-reads the supplier's debt before opening the dialog: the dialog starts from the current balance (not the one shown when the list loaded), and a supplier already settled on another machine gets "… không còn công nợ" and a refreshed list instead of a payment that would fail.

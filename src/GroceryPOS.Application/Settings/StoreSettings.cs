@@ -154,3 +154,13 @@ public sealed record SettingsSaveResult(StoreSettings Settings, IReadOnlyList<Se
 {
     public bool HasChanges => Changes.Count > 0;
 }
+
+/// <summary>
+/// Result of <see cref="StoreSettingsCodec.Merge"/>: the settings to save, the changes made meanwhile on another
+/// counter that are kept (<see cref="Kept"/>) and those this user's edit replaces (<see cref="Overridden"/>,
+/// shown as "their value → my value").
+/// </summary>
+public sealed record SettingsMerge(StoreSettings Settings, IReadOnlyList<SettingChange> Kept, IReadOnlyList<SettingChange> Overridden)
+{
+    public bool ChangedElsewhere => Kept.Count > 0 || Overridden.Count > 0;
+}

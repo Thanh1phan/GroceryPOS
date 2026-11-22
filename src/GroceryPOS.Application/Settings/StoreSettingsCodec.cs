@@ -118,7 +118,45 @@ public static class StoreSettingsCodec
             .ToList();
     }
 
-    /// <summary>Audit text: "Cửa hàng – Tên cửa hàng: "A" → "B"; Tích điểm – …", capped to fit the audit column.</summary>
+    /// <summary>
+    /// Three-way merge for a save made from a stale screen: starts from <paramref name="theirs"/> (what is stored now)
+    /// and applies only the fields this user changed (<paramref name="original"/> → <paramref name="mine"/>), so a
+    /// change saved meanwhile on another counter to a field this user did not touch is kept instead of reverted.
+    /// </summary>
+    public static SettingsMerge Merge(StoreSettings original, StoreSettings mine, StoreSettings theirs)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(mine);
+        ArgumentNullException.ThrowIfNull(theirs);
+
+        var merged = theirs;
+        var kept = new List<SettingChange>();
+        var overridden = new List<SettingChange>();
+        foreach (var field in Fields)
+        {
+            var before = field.Write(original);
+            var minesValue = field.Write(mine);
+            var theirsValue = field.Write(theirs);
+            var mineChanged = !string.Equals(before, minesValue, StringComparison.Ordinal);
+            var theirsChanged = !string.Equals(before, theirsValue, StringComparison.Ordinal);
+            if (mineChanged)
+            {
+                merged = field.Read(merged, minesValue) ?? merged;
+                if (theirsChanged && !string.Equals(minesValue, theirsValue, StringComparison.Ordinal))
+                {
+                    overridden.Add(new SettingChange(field.Key, field.Section, field.Label, field.Display(theirs), field.Display(mine)));
+                }
+            }
+            else if (theirsChanged)
+            {
+                kept.Add(new SettingChange(field.Key, field.Section, field.Label, field.Display(original), field.Display(theirs)));
+            }
+        }
+
+        return new SettingsMerge(merged, kept, overridden);
+    }
+
+    /// <summary>Audit text:"Cửa hàng – Tên cửa hàng: "A" → "B"; Tích điểm – …", capped to fit the audit column.</summary>
     public static string DescribeForAudit(IReadOnlyList<SettingChange> changes, int maxLength = 1000)
     {
         ArgumentNullException.ThrowIfNull(changes);

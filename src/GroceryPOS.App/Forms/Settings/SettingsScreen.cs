@@ -1,13 +1,13 @@
 using GroceryPOS.App.Forms.Pos;
-using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Application.Validation;
-using GroceryPOS.Domain.Partners;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Settings;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
 using GroceryPOS.UI.Controls.Navigation;
@@ -20,17 +20,17 @@ namespace GroceryPOS.App.Forms.Settings;
 /// Cấu hình (<c>settings.manage</c>): store identity, receipt footer and paper, loyalty policy and sales rules – shared by
 /// every counter through the database – plus this machine's light/dark theme. Fields are validated as they are typed, the
 /// receipt on the right is re-laid out live with the edited values, and Ctrl+S saves after listing what will change.
+/// Passive MVP view – the logic lives in <see cref="SettingsPresenter"/>; only the per-machine theme is handled here.
 /// </summary>
-internal sealed class SettingsScreen : UserControl
+internal sealed class SettingsScreen : BaseUserControl, ISettingsView
 {
     private const int Col = 8;
     private const int FullWidth = 560;
     private const int HalfWidth = 272;
     private const int RightColumn = Col + HalfWidth + 16;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly StoreSettingsValidator _validator = new();
-    private readonly StoreProfile _baseStore;
+    private readonly SettingsPresenter _presenter;
+    private readonly ModernTabControl _tabs;
 
     private readonly ModernBadge _status;
     private readonly ModernButton _save;
@@ -69,19 +69,11 @@ internal sealed class SettingsScreen : UserControl
     private readonly TextBox _receiptPreview;
     private readonly Dictionary<string, ModernTextBox> _fieldBoxes;
 
-    private StoreSettings _saved = new();
-    private bool _loaded;
     private bool _populating;
 
-    public SettingsScreen(IServiceScopeFactory scopeFactory)
+    public SettingsScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        using (var scope = scopeFactory.CreateScope())
-        {
-            _baseStore = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
-        }
-
-        Dock = DockStyle.Fill;
+        _presenter = services.GetRequiredService<SettingsPresenter>();
 
         // ---- Header -------------------------------------------------------------------------------
         var title = new Label { Text = "Cấu hình cửa hàng", AutoSize = true, Location = new Point(0, 2), Font = new Font(Font.FontFamily, 14, FontStyle.Bold) };
@@ -95,11 +87,11 @@ internal sealed class SettingsScreen : UserControl
         _status = new ModernBadge { Location = new Point(230, 8) };
 
         _save = HeaderButton("Lưu thay đổi (Ctrl+S)", Glyphs.Save, ButtonVariant.Primary, 190);
-        _save.Click += async (_, _) => await SaveAsync();
+        _save.Click += async (_, _) => await _presenter.SaveAsync();
         _undo = HeaderButton("Hoàn tác", Glyphs.Refresh, ButtonVariant.Secondary, 120);
-        _undo.Click += (_, _) => Populate(_saved);
+        _undo.Click += (_, _) => _presenter.Undo();
         _defaults = HeaderButton("Khôi phục mặc định", Glyphs.History, ButtonVariant.Ghost, 170);
-        _defaults.Click += (_, _) => RestoreDefaults();
+        _defaults.Click += async (_, _) => await _presenter.RestoreDefaultsAsync();
 
         var headerActions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
         headerActions.Controls.AddRange([_defaults, _undo, _save]);
@@ -181,17 +173,17 @@ internal sealed class SettingsScreen : UserControl
         _themeDark.CheckedChanged += (_, _) => { if (_themeDark.Checked) ThemeManager.SetMode(ThemeMode.Dark); };
         ThemeManager.ThemeChanged += OnThemeChanged;
 
-        var tabs = new ModernTabControl { Dock = DockStyle.Fill };
-        tabs.TabPages.Add(storePage);
-        tabs.TabPages.Add(receiptPage);
-        tabs.TabPages.Add(loyaltyPage);
-        tabs.TabPages.Add(salesPage);
-        tabs.TabPages.Add(themePage);
+        _tabs = new ModernTabControl { Dock = DockStyle.Fill };
+        _tabs.TabPages.Add(storePage);
+        _tabs.TabPages.Add(receiptPage);
+        _tabs.TabPages.Add(loyaltyPage);
+        _tabs.TabPages.Add(salesPage);
+        _tabs.TabPages.Add(themePage);
 
         _warnings = new ToneLabel { Dock = DockStyle.Bottom, Height = 84, Tone = LabelTone.Warning, Padding = new Padding(4, 8, 0, 0) };
 
         var formCard = new ModernCard { Dock = DockStyle.Fill, Title = "Thiết lập", HeaderGlyph = Glyphs.Settings };
-        formCard.Controls.Add(tabs);
+        formCard.Controls.Add(_tabs);
         formCard.Controls.Add(_warnings);
 
         // ---- Receipt preview ----------------------------------------------------------------------
@@ -206,7 +198,7 @@ internal sealed class SettingsScreen : UserControl
             BorderStyle = BorderStyle.None,
         };
         var printPreview = new ModernButton { Text = "Xem bản in…", Variant = ButtonVariant.Secondary, IconGlyph = Glyphs.Print, Dock = DockStyle.Bottom, Height = 40 };
-        printPreview.Click += (_, _) => ShowPrintPreview();
+        printPreview.Click += (_, _) => _presenter.PrintPreview();
         var previewCard = new ModernCard { Dock = DockStyle.Fill, Title = "Xem trước hóa đơn", Subtitle = "Hóa đơn mẫu với thông tin đang sửa", HeaderGlyph = Glyphs.Document };
         previewCard.Controls.Add(_receiptPreview);
         previewCard.Controls.Add(printPreview);
@@ -256,9 +248,15 @@ internal sealed class SettingsScreen : UserControl
             }
         }
 
-        SetEnabled(false);
-        Load += async (_, _) => await LoadSettingsAsync();
+        _presenter.Attach(this);
     }
+
+    /// <summary>F5 reloads, but asks first when there are unsaved changes.</summary>
+    public override Task RefreshDataAsync() => _presenter.ReloadAsync();
+
+    public override bool CanLeave() => _presenter.ConfirmLeave();
+
+    protected override Task OnFirstLoadAsync() => _presenter.LoadAsync();
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
@@ -266,7 +264,7 @@ internal sealed class SettingsScreen : UserControl
         {
             if (_save.Enabled)
             {
-                _ = SaveAsync();
+                _ = _presenter.SaveAsync();
             }
 
             return true;
@@ -285,105 +283,11 @@ internal sealed class SettingsScreen : UserControl
         base.Dispose(disposing);
     }
 
-    // ---- Loading & saving ---------------------------------------------------------------------------
+    // ---- ISettingsView --------------------------------------------------------------------------------
 
-    private async Task LoadSettingsAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<ISettingsService>().GetAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
+    bool IView.IsAlive => IsAlive;
 
-        if (result.IsFailure)
-        {
-            _status.Set("Không tải được", BadgeKind.Danger);
-            ModernDialog.Warning(FindForm(), result.Error.Message, "Cấu hình");
-            return;
-        }
-
-        _saved = result.Value.Normalize();
-        _loaded = true;
-        SetEnabled(true);
-        Populate(_saved);
-        _name.Focus();
-    }
-
-    private async Task SaveAsync()
-    {
-        var edited = ReadSettings();
-        var changes = StoreSettingsCodec.Diff(_saved, edited);
-        if (changes.Count == 0)
-        {
-            Toaster.Info(this, "Không có thay đổi nào để lưu.");
-            return;
-        }
-
-        var list = string.Join("\n", changes.Take(10).Select(c => $"• {c}"));
-        if (changes.Count > 10)
-        {
-            list += $"\n• … và {changes.Count - 10} thay đổi khác";
-        }
-
-        if (!ModernDialog.Confirm(FindForm(), $"Lưu {changes.Count} thay đổi cấu hình?\n\n{list}", "Lưu cấu hình", "Lưu", "Xem lại"))
-        {
-            return;
-        }
-
-        _save.Enabled = false;
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<ISettingsService>().SaveAsync(edited);
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (result.IsFailure)
-            {
-                ModernDialog.Warning(FindForm(), result.Error.Message, "Không lưu được cấu hình");
-                return;
-            }
-
-            _saved = result.Value.Settings;
-            Populate(_saved);
-            Toaster.Success(this, $"Đã lưu {result.Value.Changes.Count} thay đổi. Các màn hình mở sau sẽ dùng cấu hình mới.", "Đã lưu cấu hình");
-        }
-        finally
-        {
-            if (!IsDisposed)
-            {
-                UpdateState();
-            }
-        }
-    }
-
-    private void RestoreDefaults()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var defaults = scope.ServiceProvider.GetRequiredService<ISettingsService>().GetDefaults();
-        if (defaults.IsFailure)
-        {
-            ModernDialog.Warning(FindForm(), defaults.Error.Message, "Cấu hình");
-            return;
-        }
-
-        if (ModernDialog.Confirm(
-                FindForm(),
-                "Đưa mọi thiết lập về giá trị trong file appsettings.json?\nThay đổi chỉ được ghi khi bạn bấm \"Lưu thay đổi\".",
-                "Khôi phục mặc định",
-                "Khôi phục",
-                "Hủy"))
-        {
-            Populate(defaults.Value);
-        }
-    }
-
-    // ---- Form ⇄ settings ----------------------------------------------------------------------------
-
-    private void Populate(StoreSettings settings)
+    void ISettingsView.ShowSettings(StoreSettings settings)
     {
         _populating = true;
         try
@@ -407,11 +311,9 @@ internal sealed class SettingsScreen : UserControl
         {
             _populating = false;
         }
-
-        UpdateState();
     }
 
-    private StoreSettings ReadSettings() => new StoreSettings
+    StoreSettings ISettingsView.ReadSettings() => new()
     {
         StoreName = _name.Text,
         Address = _address.Text,
@@ -426,26 +328,15 @@ internal sealed class SettingsScreen : UserControl
         RequireOpenShift = _requireOpenShift.Checked,
         AllowNegativeStock = _allowNegativeStock.Checked,
         ShiftVarianceNoteThreshold = _varianceThreshold.ValueOrZero,
-    }.Normalize();
+    };
 
-    private void OnEdited()
+    void ISettingsView.ShowState(SettingsFormState state)
     {
-        if (!_populating && _loaded)
-        {
-            UpdateState();
-        }
-    }
-
-    /// <summary>Validation states, footer counter, loyalty summary, warnings, receipt preview and the dirty badge.</summary>
-    private void UpdateState()
-    {
-        var settings = ReadSettings();
-        var errors = _validator.Validate(settings).ToFieldErrors();
         foreach (var (property, box) in _fieldBoxes)
         {
-            if (errors.TryGetValue(property, out var messages))
+            if (state.FieldErrors.TryGetValue(property, out var message))
             {
-                box.SetError(messages[0]);
+                box.SetError(message);
             }
             else
             {
@@ -453,85 +344,99 @@ internal sealed class SettingsScreen : UserControl
             }
         }
 
-        var footerLines = StoreSettings.FooterLineCount(settings.ReceiptFooter);
-        if (errors.TryGetValue(nameof(StoreSettings.ReceiptFooter), out var footerErrors))
-        {
-            _footerInfo.Text = footerErrors[0];
-            _footerInfo.Tone = LabelTone.Danger;
-        }
-        else
-        {
-            _footerInfo.Text = $"{footerLines}/{StoreSettingsValidator.MaxFooterLines} dòng · {settings.ReceiptFooter.Length}/{StoreSettingsValidator.MaxFooterLength} ký tự";
-            _footerInfo.Tone = LabelTone.Muted;
-        }
-
-        _loyaltySummary.Text = string.Join(Environment.NewLine, SettingsText.LoyaltySummary(settings.VndPerPoint, settings.PointValueVnd));
-
-        var warnings = SettingsText.Warnings(settings);
-        _warnings.Text = warnings.Count == 0 ? string.Empty : string.Join(Environment.NewLine, warnings.Select(w => "⚠ " + w));
-
-        RenderReceipt(settings);
-
-        var dirty = _loaded && StoreSettingsCodec.Diff(_saved, settings).Count > 0;
-        var valid = errors.Count == 0;
-        _save.Enabled = _loaded && dirty && valid;
-        _undo.Enabled = _loaded && dirty;
-        if (!_loaded)
-        {
-            _status.Set("Đang tải…", BadgeKind.Neutral);
-        }
-        else if (!valid)
-        {
-            _status.Set("Có lỗi cần sửa", BadgeKind.Danger);
-        }
-        else if (dirty)
-        {
-            _status.Set("Chưa lưu", BadgeKind.Warning);
-        }
-        else
-        {
-            _status.Set("Đã lưu", BadgeKind.Success);
-        }
+        _footerInfo.Text = state.FooterInfo;
+        _footerInfo.Tone = LabelToneFor(state.FooterTone);
+        _loyaltySummary.Text = state.LoyaltySummary.Replace("\n", Environment.NewLine);
+        _warnings.Text = string.Join(Environment.NewLine, state.Warnings.Select(w => "⚠ " + w));
+        _receiptPreview.Text = state.ReceiptPreview.Replace("\n", Environment.NewLine);
+        _status.Set(state.StatusText, BadgeFor(state.StatusTone));
+        _save.Enabled = state.CanSave;
+        _undo.Enabled = state.CanUndo;
     }
 
-    private void RenderReceipt(StoreSettings settings)
-    {
-        var data = SampleReceipt(settings);
-        var lines = ReceiptFormatter.Format(data, ReceiptFormatter.ColumnsFor(settings.ReceiptPaperWidthMm));
-        _receiptPreview.Text = ReceiptFormatter.ToText(lines).Replace("\n", Environment.NewLine);
-    }
-
-    private ReceiptData SampleReceipt(StoreSettings settings)
-    {
-        // An empty name is a validation error; keep the preview readable meanwhile.
-        var store = (settings with { StoreName = string.IsNullOrWhiteSpace(settings.StoreName) ? "(Tên cửa hàng)" : settings.StoreName }).ApplyTo(_baseStore);
-        return SettingsText.SampleReceipt(store, new LoyaltyPolicy(settings.VndPerPoint, settings.PointValueVnd), DateTimeOffset.Now);
-    }
-
-    private void ShowPrintPreview()
-    {
-        var settings = ReadSettings();
-        using var preview = new ReceiptPreviewForm(SampleReceipt(settings), settings.ReceiptPaperWidthMm);
-        preview.ShowDialog(FindForm());
-    }
-
-    private void SetEnabled(bool enabled)
+    void ISettingsView.SetEditable(bool editable)
     {
         foreach (var box in _fieldBoxes.Values)
         {
-            box.Enabled = enabled;
+            box.Enabled = editable;
         }
 
-        _footer.Enabled = enabled;
-        _paper58.Enabled = _paper80.Enabled = _previewAfterCheckout.Enabled = enabled;
-        _requireOpenShift.Enabled = _allowNegativeStock.Enabled = enabled;
-        _defaults.Enabled = enabled;
-        if (!enabled)
+        _footer.Enabled = editable;
+        _paper58.Enabled = _paper80.Enabled = _previewAfterCheckout.Enabled = editable;
+        _requireOpenShift.Enabled = _allowNegativeStock.Enabled = editable;
+        _defaults.Enabled = editable;
+    }
+
+    void ISettingsView.FocusField(string property)
+    {
+        Control? field = property switch
         {
-            _save.Enabled = _undo.Enabled = false;
-            _status.Set("Đang tải…", BadgeKind.Neutral);
+            nameof(StoreSettings.ReceiptFooter) => _footer,
+            nameof(StoreSettings.ReceiptPaperWidthMm) => _paper80,
+            _ => _fieldBoxes.GetValueOrDefault(property),
+        };
+        if (field is null)
+        {
+            return;
+        }
+
+        for (var parent = field.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is ModernTabPage page)
+            {
+                _tabs.SelectedTab = page;
+                break;
+            }
+        }
+
+        field.Focus();
+    }
+
+    void ISettingsView.ShowReceiptPrintPreview(ReceiptData receipt, int paperWidthMm)
+    {
+        using var preview = new ReceiptPreviewForm(receipt, paperWidthMm);
+        preview.ShowDialog(FindForm());
+    }
+
+    void ISettingsView.ToastInfo(string message, string? title) => ToastInfo(message, title);
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, danger ? "Hủy" : "Xem lại", danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
+
+    private void OnEdited()
+    {
+        if (!_populating)
+        {
+            _presenter.Edited();
         }
     }
+
+    private static LabelTone LabelToneFor(Tone tone) => tone switch
+    {
+        Tone.Muted => LabelTone.Muted,
+        Tone.Info => LabelTone.Primary,
+        Tone.Success => LabelTone.Success,
+        Tone.Warning => LabelTone.Warning,
+        Tone.Danger => LabelTone.Danger,
+        _ => LabelTone.Normal,
+    };
+
+    private static BadgeKind BadgeFor(Tone tone) => tone switch
+    {
+        Tone.Info => BadgeKind.Info,
+        Tone.Success => BadgeKind.Success,
+        Tone.Warning => BadgeKind.Warning,
+        Tone.Danger => BadgeKind.Danger,
+        _ => BadgeKind.Neutral,
+    };
 
     private void OnThemeChanged(object? sender, ThemeChangedEventArgs e)
     {

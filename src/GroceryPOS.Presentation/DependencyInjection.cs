@@ -2,6 +2,7 @@ using GroceryPOS.Presentation.Catalog;
 using GroceryPOS.Presentation.Inventory;
 using GroceryPOS.Presentation.Partners;
 using GroceryPOS.Presentation.Purchasing;
+using GroceryPOS.Presentation.Settings;
 using GroceryPOS.Presentation.Shifts;
 using GroceryPOS.Presentation.Users;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddTransient<PurchasePresenter>();
         services.AddTransient<SupplierDebtPresenter>();
         services.AddTransient<ShiftPresenter>();
+        services.AddTransient<SettingsPresenter>();
         return services;
     }
 }
