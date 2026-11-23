@@ -1,11 +1,14 @@
 using System.Diagnostics;
 using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.Application.Backup;
+using GroceryPOS.Presentation.Backup;
+using GroceryPOS.Presentation.Mvp;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
 using GroceryPOS.UI.Controls.Feedback;
 using GroceryPOS.UI.Controls.Feedback.Core;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Theming;
@@ -17,14 +20,12 @@ namespace GroceryPOS.App.Forms.Settings;
 /// <summary>
 /// Sao lưu dữ liệu (<c>system.backup</c>): freshness badge and advice, KPI cards, the backups in the backup folder (newest
 /// first) with a detail card that checks the selected file, and actions – Sao lưu ngay (Ctrl+S), Phục hồi (from the list
-/// or any file, e.g. a USB stick), Sao chép ra… (copy to USB / another drive), Xóa, Mở thư mục. A restore is confirmed in a
-/// red dialog, keeps the current data as a "Trước khi phục hồi" copy, then restarts the app. F5 reloads.
+/// or any file, e.g. a USB stick), Sao chép ra… (copy to USB / another drive), Xóa, Mở thư mục. F5 reloads.
+/// Passive MVP view – the logic lives in <see cref="BackupPresenter"/>.
 /// </summary>
-internal sealed class BackupScreen : UserControl
+internal sealed class BackupScreen : BaseUserControl, IBackupView
 {
-    private const string Caption = "Sao lưu dữ liệu";
-
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly BackupPresenter _presenter;
     private readonly ModernBadge _status;
     private readonly ToneLabel _subtitle;
     private readonly ToneLabel _advice;
@@ -41,23 +42,20 @@ internal sealed class BackupScreen : UserControl
     private readonly ToneLabel _detailTitle;
     private readonly TextBox _detailText;
 
-    private BackupOverview? _overview;
-    private CancellationTokenSource? _inspectCts;
+    private bool _showingFiles;
 
-    public BackupScreen(IServiceScopeFactory scopeFactory)
+    public BackupScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        Dock = DockStyle.Fill;
+        _presenter = services.GetRequiredService<BackupPresenter>();
 
         // ---- Header ---------------------------------------------------------------------------------------
         var title = new Label { Text = "Sao lưu & phục hồi dữ liệu", AutoSize = true, Location = new Point(0, 2), Font = new Font(Font.FontFamily, 14, FontStyle.Bold) };
         _status = new ModernBadge { Location = new Point(300, 8) };
-        _status.Set("Đang tải…", BadgeKind.Neutral);
         _subtitle = new ToneLabel { AutoSize = true, Location = new Point(0, 34), Tone = LabelTone.Muted };
 
-        var openFolder = Action("Mở thư mục", Glyphs.Document, ButtonVariant.Ghost, OpenFolder);
-        _restoreFile = Action("Phục hồi từ file…", Glyphs.Return, ButtonVariant.Secondary, RestoreFromFileAsync);
-        _backupNow = Action("Sao lưu ngay (Ctrl+S)", Glyphs.Save, ButtonVariant.Primary, BackupNowAsync);
+        var openFolder = Action("Mở thư mục", Glyphs.Document, ButtonVariant.Ghost, () => { _presenter.OpenFolder(); return Task.CompletedTask; });
+        _restoreFile = Action("Phục hồi từ file…", Glyphs.Return, ButtonVariant.Secondary, () => _presenter.RestoreFromFileAsync());
+        _backupNow = Action("Sao lưu ngay (Ctrl+S)", Glyphs.Save, ButtonVariant.Primary, () => _presenter.BackupNowAsync());
         var headerActions = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
         headerActions.Controls.AddRange([openFolder, _restoreFile, _backupNow]);
 
@@ -83,12 +81,12 @@ internal sealed class BackupScreen : UserControl
         _grid.AddTextColumn(nameof(BackupFile.SizeText), "Kích thước", width: 100, searchable: false);
         _grid.AddTextColumn(nameof(BackupFile.FileName), "Tên file");
         _grid.SelectionChanged += (_, _) => OnSelectionChanged();
-        _grid.RowActivated += async (_, _) => await InspectSelectedAsync();
+        _grid.RowActivated += async (_, _) => await _presenter.InspectSelectedAsync();
 
-        _check = Action("Kiểm tra", Glyphs.Accept, ButtonVariant.Secondary, InspectSelectedAsync);
-        _restore = Action("Phục hồi", Glyphs.Return, ButtonVariant.Danger, RestoreSelectedAsync);
-        _copy = Action("Sao chép ra…", Glyphs.Copy, ButtonVariant.Secondary, CopySelectedAsync);
-        _delete = Action("Xóa", Glyphs.Delete, ButtonVariant.Ghost, DeleteSelectedAsync);
+        _check = Action("Kiểm tra", Glyphs.Accept, ButtonVariant.Secondary, () => _presenter.InspectSelectedAsync());
+        _restore = Action("Phục hồi", Glyphs.Return, ButtonVariant.Danger, () => _presenter.RestoreSelectedAsync());
+        _copy = Action("Sao chép ra…", Glyphs.Copy, ButtonVariant.Secondary, () => _presenter.CopySelectedAsync());
+        _delete = Action("Xóa", Glyphs.Delete, ButtonVariant.Ghost, () => _presenter.DeleteSelectedAsync());
         _grid.ToolbarItems.Controls.AddRange([_check, _restore, _copy, _delete]);
 
         var gridCard = new ModernCard { Title = "Các bản sao lưu", HeaderGlyph = Glyphs.List, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 16, 0) };
@@ -131,369 +129,156 @@ internal sealed class BackupScreen : UserControl
         Controls.Add(_advice);
         Controls.Add(header);
 
-        ShowDetail(null, null);
-        Load += async (_, _) => await ReloadAsync();
-        Disposed += (_, _) => _inspectCts?.Cancel();
+        _presenter.Attach(this);
     }
+
+    public override Task RefreshDataAsync() => _presenter.LoadAsync();
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         switch (keyData)
         {
-            case Keys.Control | Keys.S:
-                _ = BackupNowAsync();
+            case Keys.Control | Keys.S when !IsBusy:
+                _ = _presenter.BackupNowAsync();
                 return true;
-            case Keys.F5:
-                _ = ReloadAsync();
-                return true;
-            case Keys.Delete when _grid.ContainsFocus:
-                _ = DeleteSelectedAsync();
+            case Keys.Delete when _grid.ContainsFocus && !IsBusy:
+                _ = _presenter.DeleteSelectedAsync();
                 return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    // ---- Loading ------------------------------------------------------------------------------------------
-
-    private async Task ReloadAsync(string? select = null)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IBackupService>().GetOverviewAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            _status.Set("Không tải được", BadgeKind.Danger);
-            _subtitle.Text = result.Error.Message;
-            return;
-        }
-
-        var overview = _overview = result.Value;
-        var now = DateTime.Now;
-        var latest = overview.Latest?.CreatedAt;
-        _status.Set(BackupText.Status(latest, now), BackupText.Health(latest, now) switch
-        {
-            BackupHealth.Ok => BadgeKind.Success,
-            BackupHealth.Warning => BadgeKind.Warning,
-            _ => BadgeKind.Danger,
-        });
-        _subtitle.Text = $"{BackupText.Schedule(overview.AutomaticIntervalHours)} · Thư mục: {overview.Folder}";
-
-        var advice = BackupText.Advice(latest, now);
-        _advice.Text = advice ?? string.Empty;
-        _advice.Tone = BackupText.Health(latest, now) == BackupHealth.Danger ? LabelTone.Danger : LabelTone.Warning;
-        _advice.Visible = advice is not null;
-
-        _latest.Value = latest is null ? "Chưa có" : BackupText.Age(latest.Value, now);
-        _latest.Note = overview.Latest is { } last ? $"{last.CreatedAt:HH:mm dd/MM/yyyy} · {last.KindText}" : "Hãy sao lưu ngay";
-        _count.Value = overview.Files.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        _count.Note = $"Tổng {BackupText.FormatSize(overview.TotalBytes)}";
-        _database.Value = overview.ProviderName;
-        _database.Note = overview.SupportsRestore ? "Sao lưu & phục hồi trong ứng dụng" : "Phục hồi bằng SQL Server Management Studio";
-        _restoreFile.Enabled = overview.SupportsRestore;
-
-        _grid.SetItems(overview.Files);
-        if (select is not null && overview.Files.FirstOrDefault(f => f.FileName == select) is { } selected)
-        {
-            _grid.SelectItem(selected);
-        }
-
-        OnSelectionChanged();
-    }
-
     private void OnSelectionChanged()
     {
-        var selected = _grid.GetSelected<BackupFile>();
-        _check.Enabled = selected is not null;
-        _restore.Enabled = selected is not null && _overview is { SupportsRestore: true };
-        _copy.Enabled = selected is not null;
-        _delete.Enabled = selected is not null;
-        ShowDetail(selected, null);
-        if (selected is not null)
+        if (!_showingFiles)
         {
-            _ = InspectAsync(selected, showOverlay: false);
+            _ = _presenter.SelectAsync(_grid.GetSelected<BackupFile>());
         }
     }
 
-    private void ShowDetail(BackupFile? file, BackupInspection? inspection)
+    // ---- IBackupView ------------------------------------------------------------------------------------
+
+    bool IView.IsAlive => IsAlive;
+
+    void IBackupView.ShowHeader(BackupHeader header)
     {
-        if (file is null)
-        {
-            _detailTitle.Text = "Chọn một bản sao lưu";
-            _detailTitle.Tone = LabelTone.Muted;
-            _detailText.Text = "Chọn một dòng để xem nội dung bản sao lưu (số sản phẩm, khách hàng, hóa đơn) trước khi phục hồi.";
-            return;
-        }
-
-        var lines = new List<string>
-        {
-            $"Tạo lúc: {file.CreatedAt:HH:mm:ss dd/MM/yyyy}",
-            $"Loại: {file.KindText}",
-            $"Kích thước: {file.SizeText}",
-            $"File: {file.FileName}",
-            string.Empty,
-        };
-        if (inspection is null)
-        {
-            lines.Add("Đang kiểm tra…");
-            _detailTitle.Tone = LabelTone.Normal;
-        }
-        else
-        {
-            lines.AddRange(BackupText.Describe(inspection));
-            _detailTitle.Tone = inspection.CanRestore ? LabelTone.Success : inspection.IsValid ? LabelTone.Warning : LabelTone.Danger;
-        }
-
-        _detailTitle.Text = BackupText.Age(file.CreatedAt, DateTime.Now) + " · " + file.KindText;
-        _detailText.Text = string.Join(Environment.NewLine, lines);
+        _status.Set(header.StatusText, header.StatusTone.ToBadgeKind());
+        _subtitle.Text = header.Subtitle;
+        _advice.Text = header.Advice ?? string.Empty;
+        _advice.Tone = header.AdviceTone.ToLabelTone();
+        _advice.Visible = header.Advice is not null;
+        _latest.Value = header.LatestValue;
+        _latest.Note = header.LatestNote;
+        _count.Value = header.CountValue;
+        _count.Note = header.CountNote;
+        _database.Value = header.DatabaseValue;
+        _database.Note = header.DatabaseNote;
+        _restoreFile.Enabled = header.CanRestoreFromFile;
     }
 
-    private async Task<BackupInspection?> InspectAsync(BackupFile file, bool showOverlay)
+    BackupFile? IBackupView.ShowFiles(IReadOnlyList<BackupFile> files, BackupFile? select)
     {
-        _inspectCts?.Cancel();
-        var cts = _inspectCts = new CancellationTokenSource();
+        // The presenter picks the selection itself; grid events raised while refilling are not user choices.
+        _showingFiles = true;
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var service = scope.ServiceProvider.GetRequiredService<IBackupService>();
-            var result = showOverlay
-                ? await LoadingOverlay.RunAsync(this, () => service.InspectAsync(file.FullPath, cts.Token), "Đang kiểm tra bản sao lưu…")
-                : await service.InspectAsync(file.FullPath, cts.Token);
-            if (IsDisposed || cts.IsCancellationRequested)
+            _grid.SetItems(files);
+            if (select is not null)
             {
-                return null;
+                _grid.SelectItem(select);
             }
 
-            if (result.IsFailure)
-            {
-                ShowDetail(file, BackupInspection.Invalid(result.Error.Message));
-                return null;
-            }
-
-            if (_grid.GetSelected<BackupFile>()?.FullPath == file.FullPath)
-            {
-                ShowDetail(file, result.Value);
-            }
-
-            return result.Value;
+            return _grid.GetSelected<BackupFile>();
         }
-        catch (OperationCanceledException)
+        finally
         {
-            return null;
+            _showingFiles = false;
         }
     }
 
-    // ---- Actions ------------------------------------------------------------------------------------------
-
-    private async Task BackupNowAsync()
+    void IBackupView.ShowDetail(BackupDetail detail)
     {
-        if (!_backupNow.Enabled || LoadingOverlay.IsBusy(this))
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<IBackupService>();
-        var result = await LoadingOverlay.RunAsync(this, () => service.CreateAsync(), "Đang sao lưu dữ liệu…");
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Error(FindForm(), result.Error.Message, Caption);
-            return;
-        }
-
-        var file = result.Value;
-        Toaster.Show(
-            this,
-            new ToastRequest(FeedbackKind.Success, $"Đã sao lưu {file.SizeText} – {file.FileName}", Caption, ActionText: "Sao chép ra…"),
-            () => _ = CopyAsync(file));
-        await ReloadAsync(select: file.FileName);
+        _detailTitle.Text = detail.Title;
+        _detailTitle.Tone = detail.TitleTone.ToLabelTone();
+        _detailText.Text = string.Join(Environment.NewLine, detail.Lines);
     }
 
-    private async Task InspectSelectedAsync()
+    void IBackupView.ShowActions(BackupActions actions)
     {
-        if (_grid.GetSelected<BackupFile>() is { } file)
-        {
-            ShowDetail(file, null);
-            await InspectAsync(file, showOverlay: true);
-        }
+        _check.Enabled = actions.CanInspect;
+        _restore.Enabled = actions.CanRestore;
+        _copy.Enabled = actions.CanCopy;
+        _delete.Enabled = actions.CanDelete;
     }
 
-    private async Task RestoreSelectedAsync()
-    {
-        if (_grid.GetSelected<BackupFile>() is { } file)
-        {
-            await RestoreAsync(file);
-        }
-    }
+    Task<T> IBackupView.RunBusyAsync<T>(Func<Task<T>> work, string message) => RunBusyAsync(work, message);
 
-    private async Task RestoreFromFileAsync()
+    void IBackupView.ShowError(string message, string title) => ShowError(message, title);
+
+    void IBackupView.ShowWarning(string message, string title, string details) => ModernDialog.Warning(FindForm(), message, title, details);
+
+    void IBackupView.ShowSuccess(string message, string title) => ModernDialog.Success(FindForm(), message, title);
+
+    void IBackupView.ToastWarning(string message, string? title) => ToastWarning(message, title);
+
+    void IBackupView.ToastBackupCreated(string message, string title, Action copy) =>
+        Toaster.Show(this, new ToastRequest(FeedbackKind.Success, message, title, ActionText: "Sao chép ra…"), copy);
+
+    string? IBackupView.PickRestoreFile(string initialFolder)
     {
         using var dialog = new OpenFileDialog
         {
             Title = "Chọn file sao lưu để phục hồi",
             Filter = "Bản sao lưu GroceryPOS (*.db)|*.db|Tất cả file (*.*)|*.*",
-            InitialDirectory = _overview?.Folder ?? string.Empty,
+            InitialDirectory = initialFolder,
         };
-        if (dialog.ShowDialog(FindForm()) == DialogResult.OK)
-        {
-            await RestoreAsync(BackupFile.FromPath(dialog.FileName));
-        }
+        return dialog.ShowDialog(FindForm()) == DialogResult.OK ? dialog.FileName : null;
     }
 
-    private async Task RestoreAsync(BackupFile file)
-    {
-        if (_overview is not { SupportsRestore: true } || LoadingOverlay.IsBusy(this))
-        {
-            return;
-        }
-
-        var inspection = await InspectAsync(file, showOverlay: true);
-        if (IsDisposed || inspection is null)
-        {
-            return;
-        }
-
-        if (!inspection.CanRestore)
-        {
-            ModernDialog.Warning(FindForm(), "Không thể phục hồi từ file này.", Caption, string.Join(Environment.NewLine, BackupText.Describe(inspection)));
-            return;
-        }
-
-        var summary = string.Join(Environment.NewLine, BackupText.Describe(inspection).Skip(1));
-        if (!ModernDialog.Confirm(
-                FindForm(),
-                $"{BackupText.RestoreWarning(file)}\n\nNội dung bản sao lưu:\n{summary}",
-                "Phục hồi dữ liệu",
-                "Phục hồi và khởi động lại",
-                "Không phục hồi",
-                danger: true))
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<IBackupService>();
-        var result = await LoadingOverlay.RunAsync(this, () => service.RestoreAsync(file.FullPath), "Đang phục hồi dữ liệu… Không tắt máy.");
-        if (result.IsFailure)
-        {
-            ModernDialog.Error(FindForm(), result.Error.Message, Caption);
-            await ReloadAsync();
-            return;
-        }
-
-        ModernDialog.Success(
-            FindForm(),
-            $"Đã phục hồi dữ liệu từ bản sao lưu lúc {file.CreatedAt:HH:mm dd/MM/yyyy}.\n\n" +
-            $"Dữ liệu trước khi phục hồi được giữ ở bản \"{result.Value.SafetyCopy.FileName}\".\n\nỨng dụng sẽ khởi động lại để tải dữ liệu mới; hãy đăng nhập lại.",
-            Caption);
-        RestartApplication();
-    }
-
-    private async Task CopySelectedAsync()
-    {
-        if (_grid.GetSelected<BackupFile>() is { } file)
-        {
-            await CopyAsync(file);
-        }
-    }
-
-    private async Task CopyAsync(BackupFile file)
+    string? IBackupView.PickCopyTarget(BackupFile file)
     {
         if (IsDisposed)
         {
-            return;
+            return null;
         }
 
+        var extension = Path.GetExtension(file.FileName);
         using var dialog = new SaveFileDialog
         {
             Title = "Sao chép bản sao lưu ra (USB, ổ đĩa khác…)",
             FileName = file.FileName,
-            Filter = $"Bản sao lưu (*{Path.GetExtension(file.FileName)})|*{Path.GetExtension(file.FileName)}",
+            Filter = $"Bản sao lưu (*{extension})|*{extension}",
         };
-        if (dialog.ShowDialog(FindForm()) != DialogResult.OK)
-        {
-            return;
-        }
+        return dialog.ShowDialog(FindForm()) == DialogResult.OK ? dialog.FileName : null;
+    }
 
-        var target = dialog.FileName;
-        if (string.Equals(Path.GetFullPath(target), file.FullPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
+    string? IBackupView.OpenFolder(string folder)
+    {
         try
         {
-            await LoadingOverlay.RunAsync(this, () => Task.Run(() => File.Copy(file.FullPath, target, overwrite: true)), "Đang sao chép…");
+            Directory.CreateDirectory(folder);
+            Process.Start(new ProcessStartInfo(folder) { UseShellExecute = true });
+            return null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
-            ModernDialog.Warning(FindForm(), "Không sao chép được. Kiểm tra USB/ổ đĩa còn chỗ trống và cho phép ghi.", Caption, ex.Message);
-            return;
+            return ex.Message;
         }
-
-        Toaster.Success(this, $"Đã sao chép {file.FileName} ra {Path.GetDirectoryName(target)}.", Caption);
     }
 
-    private async Task DeleteSelectedAsync()
-    {
-        if (_grid.GetSelected<BackupFile>() is not { } file)
-        {
-            return;
-        }
+    void IBackupView.RestartApplication() => RestartApplication();
 
-        var warning = file.Kind == BackupKind.Manual
-            ? "Bản sao lưu thủ công này sẽ không thể khôi phục lại."
-            : "Thao tác này không hoàn tác được.";
-        if (!ModernDialog.Confirm(FindForm(), $"Xóa bản sao lưu lúc {file.CreatedAt:HH:mm dd/MM/yyyy} ({file.SizeText})?\n{warning}", Caption, "Xóa", "Giữ lại", danger: true))
-        {
-            return;
-        }
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
 
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IBackupService>().DeleteAsync(file.FileName);
-        if (IsDisposed)
-        {
-            return;
-        }
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
 
-        if (result.IsFailure)
-        {
-            ModernDialog.Warning(FindForm(), result.Error.Message, Caption);
-        }
-        else
-        {
-            Toaster.Success(this, $"Đã xóa {file.FileName}.", Caption);
-        }
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, confirmText.StartsWith("Phục hồi", StringComparison.Ordinal) ? "Không phục hồi" : "Giữ lại", danger);
 
-        await ReloadAsync();
-    }
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
 
-    private Task OpenFolder()
-    {
-        if (_overview is { } overview)
-        {
-            try
-            {
-                Directory.CreateDirectory(overview.Folder);
-                Process.Start(new ProcessStartInfo(overview.Folder) { UseShellExecute = true });
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-            {
-                Toaster.Warning(this, $"Không mở được thư mục: {ex.Message}", Caption);
-            }
-        }
-
-        return Task.CompletedTask;
-    }
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 
     /// <summary>
     /// Starts a fresh instance and ends this one: every singleton (session, settings, cached screens) belonged to the data

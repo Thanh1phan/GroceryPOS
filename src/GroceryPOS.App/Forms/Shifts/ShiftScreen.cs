@@ -159,15 +159,6 @@ internal sealed class ShiftScreen : BaseUserControl, IShiftView
         _closeForOther.Enabled = _presenter.CanCloseForOther(row);
     }
 
-    private static BadgeKind BadgeFor(Tone tone) => tone switch
-    {
-        Tone.Info => BadgeKind.Info,
-        Tone.Success => BadgeKind.Success,
-        Tone.Warning => BadgeKind.Warning,
-        Tone.Danger => BadgeKind.Danger,
-        _ => BadgeKind.Neutral,
-    };
-
     private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0 || _grid.InnerGrid.Rows[e.RowIndex].Tag is not ShiftRow row || e.CellStyle is not { } style)
@@ -195,7 +186,7 @@ internal sealed class ShiftScreen : BaseUserControl, IShiftView
 
     void IShiftView.ShowCurrent(CurrentShiftState state)
     {
-        _status.Set(state.BadgeText, BadgeFor(state.BadgeTone));
+        _status.Set(state.BadgeText, state.BadgeTone.ToBadgeKind());
         _title.Text = state.Title;
         _subtitle.Text = state.Subtitle;
         _open.Visible = state.CanOpen;

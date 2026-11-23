@@ -1,5 +1,6 @@
 using FluentValidation;
 using GroceryPOS.Application.Abstractions;
+using GroceryPOS.Application.Backup;
 using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Inventory;
@@ -239,6 +240,8 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IShiftService>(sp => sp.GetRequiredService<FakeShiftService>());
         services.AddSingleton(Settings);
         services.AddScoped<ISettingsService>(sp => sp.GetRequiredService<FakeSettingsService>());
+        services.AddSingleton(Backups);
+        services.AddScoped<IBackupService>(sp => sp.GetRequiredService<FakeBackupService>());
         services.AddSingleton<TimeProvider>(Clock);
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -269,6 +272,8 @@ internal sealed class TestHost : IDisposable
     public FakeSupplierReturnService SupplierReturns { get; } = new();
 
     public FakeSettingsService Settings { get; } = new();
+
+    public FakeBackupService Backups { get; } = new();
 
     public FixedClock Clock { get; } = new();
 

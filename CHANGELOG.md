@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-23
+- **Sao lưu dữ liệu** moved to MVP: `Presentation.Backup.BackupPresenter` (overview, background check of the selected file, Sao lưu ngay Ctrl+S with the "Sao chép ra…" toast, Phục hồi from the list or any file with the red confirmation and restart, Sao chép ra…, Xóa, Mở thư mục). The badge, advice line and KPI cards come from the tested `BackupHeader`, the detail card from `BackupDetail`; `BackupScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- Checking a backup is cached per file, so moving back and forth in the list no longer re-reads each database file; a restore always re-checks the file. A slow check of a row you already left can no longer overwrite the detail of the current row.
+- After Xóa the neighbouring backup stays selected (previously the list jumped back to the top); reloading keeps the selected backup.
+- Fixes: a failed reload replaced the header with "Không tải được" although the list was still valid (now an error toast, the screen stays); a check that failed (e.g. a locked file) was shown for whichever row was selected by then; two long actions (e.g. Ctrl+S during a copy) could start at the same time – only one runs now.
+- Refactor: one shared `ToneMapping` (Tone → label tone / badge kind) replaces the copies in Cấu hình and Ca làm việc. 26 new presenter tests (Domain 149, Application 488, Infrastructure 63, UI.Controls 440, Presentation 303 – all passing).
+
 ## 2026-11-22
 - **Cấu hình** moved to MVP: `Presentation.Settings.SettingsPresenter` (load, live state while editing, Hoàn tác, Khôi phục mặc định, save after listing the changes, print preview of the sample receipt). Validation marks, footer counter, loyalty explanation, warnings, the live receipt and the status badge come from the tested `SettingsFormState`; `SettingsScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - **Saving no longer reverts another counter's changes**: the screen used to save its whole (possibly stale) copy, so a loyalty change saved on counter A was silently undone when counter B saved a new phone number. Saving now re-reads the stored settings and merges (`StoreSettingsCodec.Merge`): untouched fields keep the other counter's values (mentioned in the success toast), and a field both changed asks "Ghi đè bằng giá trị của bạn?" – declining loads their value and keeps your other edits on screen.

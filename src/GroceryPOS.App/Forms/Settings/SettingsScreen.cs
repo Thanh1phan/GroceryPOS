@@ -345,11 +345,11 @@ internal sealed class SettingsScreen : BaseUserControl, ISettingsView
         }
 
         _footerInfo.Text = state.FooterInfo;
-        _footerInfo.Tone = LabelToneFor(state.FooterTone);
+        _footerInfo.Tone = state.FooterTone.ToLabelTone();
         _loyaltySummary.Text = state.LoyaltySummary.Replace("\n", Environment.NewLine);
         _warnings.Text = string.Join(Environment.NewLine, state.Warnings.Select(w => "⚠ " + w));
         _receiptPreview.Text = state.ReceiptPreview.Replace("\n", Environment.NewLine);
-        _status.Set(state.StatusText, BadgeFor(state.StatusTone));
+        _status.Set(state.StatusText, state.StatusTone.ToBadgeKind());
         _save.Enabled = state.CanSave;
         _undo.Enabled = state.CanUndo;
     }
@@ -418,25 +418,6 @@ internal sealed class SettingsScreen : BaseUserControl, ISettingsView
             _presenter.Edited();
         }
     }
-
-    private static LabelTone LabelToneFor(Tone tone) => tone switch
-    {
-        Tone.Muted => LabelTone.Muted,
-        Tone.Info => LabelTone.Primary,
-        Tone.Success => LabelTone.Success,
-        Tone.Warning => LabelTone.Warning,
-        Tone.Danger => LabelTone.Danger,
-        _ => LabelTone.Normal,
-    };
-
-    private static BadgeKind BadgeFor(Tone tone) => tone switch
-    {
-        Tone.Info => BadgeKind.Info,
-        Tone.Success => BadgeKind.Success,
-        Tone.Warning => BadgeKind.Warning,
-        Tone.Danger => BadgeKind.Danger,
-        _ => BadgeKind.Neutral,
-    };
 
     private void OnThemeChanged(object? sender, ThemeChangedEventArgs e)
     {

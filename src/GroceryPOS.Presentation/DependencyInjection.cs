@@ -1,3 +1,4 @@
+using GroceryPOS.Presentation.Backup;
 using GroceryPOS.Presentation.Catalog;
 using GroceryPOS.Presentation.Inventory;
 using GroceryPOS.Presentation.Partners;
@@ -37,6 +38,7 @@ public static class DependencyInjection
         services.AddTransient<SupplierDebtPresenter>();
         services.AddTransient<ShiftPresenter>();
         services.AddTransient<SettingsPresenter>();
+        services.AddTransient<BackupPresenter>();
         return services;
     }
 }

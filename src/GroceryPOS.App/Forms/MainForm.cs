@@ -210,7 +210,7 @@ public sealed class MainForm : Form
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
             "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
             "settings" => new SettingsScreen(_services),
-            "backup" => new BackupScreen(_scopeFactory),
+            "backup" => new BackupScreen(_services),
             _ => BuildPlaceholder(title),
         };
         screen.Dock = DockStyle.Fill;
