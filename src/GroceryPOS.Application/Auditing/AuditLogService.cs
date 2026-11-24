@@ -216,6 +216,11 @@ public sealed class AuditLogService : IAuditLogService
             parts.Add($"Hành động: {AuditCatalog.Describe(query.Action.Trim()).Name}");
         }
 
+        if (query.Actions is { Count: > 0 } keys)
+        {
+            parts.Add($"Hành động: {string.Join(", ", keys.Select(k => AuditCatalog.Describe(k.Trim()).Name).Distinct())}");
+        }
+
         if (query.MinSeverity is { } severity and > AuditSeverity.Info)
         {
             parts.Add(severity == AuditSeverity.Critical ? "Chỉ sự kiện quan trọng" : "Từ mức cần chú ý");
@@ -265,6 +270,12 @@ public sealed class AuditLogService : IAuditLogService
         {
             var action = query.Action.Trim();
             actions = actions is null ? [action] : actions.Where(a => a == action);
+        }
+
+        if (query.Actions is { Count: > 0 } keys)
+        {
+            var wanted = keys.Where(k => !string.IsNullOrWhiteSpace(k)).Select(k => k.Trim()).ToList();
+            actions = actions is null ? wanted : actions.Intersect(wanted);
         }
 
         if (query.MinSeverity is { } severity and > AuditSeverity.Info)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-24
+- **Nhật ký hệ thống** moved to MVP: `Presentation.Auditing.AuditLogPresenter` (period / group / severity / user filters, KPI-card shortcuts, server-paged list, detail card with Cùng người dùng / Cùng đối tượng, Xuất Excel Ctrl+E). Cards and detail come from the tested `AuditLogCards` / `AuditLogDetail`; `AuditLogScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- Fix: the "Đổi giá · chỉnh kho" card listed **every** warning (returns, failed logins, reprints…) instead of price changes and stock adjustments. Each card now filters exactly the actions it counts (new optional `AuditLogQuery.Actions`), so the card number and the list agree; choosing a group or severity ends the shortcut.
+- The status line moved under the list and names the active filters ("Bộ lọc: Hành động: …; Người dùng: …"); a successful export is confirmed with a toast instead of a status text that the following reload overwrote at once.
+- Fixes: a slow KPI load for an older period could overwrite the cards of the period you just picked; "Cùng người dùng" on an entry whose user is not in the filter (e.g. "(không rõ)") silently showed everyone – the button is now disabled; Ctrl+E pressed during an export started a second one; a failed user-list load was ignored (now an error toast); a user filter that vanished after F5 kept filtering on nothing.
+- 24 new tests (Domain 149, Application 490, Infrastructure 63, UI.Controls 440, Presentation 325 – all passing).
+
 ## 2026-11-23
 - **Sao lưu dữ liệu** moved to MVP: `Presentation.Backup.BackupPresenter` (overview, background check of the selected file, Sao lưu ngay Ctrl+S with the "Sao chép ra…" toast, Phục hồi from the list or any file with the red confirmation and restart, Sao chép ra…, Xóa, Mở thư mục). The badge, advice line and KPI cards come from the tested `BackupHeader`, the detail card from `BackupDetail`; `BackupScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - Checking a backup is cached per file, so moving back and forth in the list no longer re-reads each database file; a restore always re-checks the file. A slow check of a row you already left can no longer overwrite the detail of the current row.

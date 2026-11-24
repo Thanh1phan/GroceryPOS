@@ -163,6 +163,32 @@ public sealed class AuditLogServiceTests
     }
 
     [Fact]
+    public void Resolve_actions_keeps_an_action_set_and_intersects_it_with_the_other_filters()
+    {
+        string[] stockAndPrice = [AuditActions.PriceChanged, AuditActions.StockAdjusted, AuditActions.StockCounted];
+
+        Assert.Equal(stockAndPrice, AuditLogService.ResolveActions(new AuditLogQuery(Nov2, Actions: stockAndPrice)));
+        Assert.Equal(
+            [AuditActions.StockAdjusted, AuditActions.StockCounted],
+            AuditLogService.ResolveActions(new AuditLogQuery(Nov2, Category: AuditCategory.Inventory, Actions: stockAndPrice)));
+        Assert.Empty(AuditLogService.ResolveActions(new AuditLogQuery(Nov2, MinSeverity: AuditSeverity.Critical, Actions: stockAndPrice))!);
+        Assert.Null(AuditLogService.ResolveActions(new AuditLogQuery(Nov2, Actions: [])));
+    }
+
+    [Fact]
+    public async Task Search_with_an_action_set_returns_only_those_actions()
+    {
+        var (sut, _, _, _) = Create(SampleLogs(), Permissions.AuditLogView);
+
+        var page = (await sut.SearchAsync(new AuditLogQuery(Nov2, Actions: [AuditActions.PriceChanged, AuditActions.StockAdjusted]))).Value;
+
+        Assert.Equal([8, 7], page.Items.Select(i => i.Id));
+        Assert.Equal(
+            "Hành động: Đổi giá bán, Điều chỉnh tồn kho",
+            AuditLogService.DescribeFilters(new AuditLogQuery(Nov2, Actions: [AuditActions.PriceChanged, AuditActions.StockAdjusted])));
+    }
+
+    [Fact]
     public async Task Page_past_the_end_falls_back_to_the_last_page_and_size_is_clamped()
     {
         var (sut, _, _, _) = Create(SampleLogs(), Permissions.AuditLogView);

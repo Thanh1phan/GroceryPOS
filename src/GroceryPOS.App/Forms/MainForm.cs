@@ -208,7 +208,7 @@ public sealed class MainForm : Form
             "roles" => new RolePermissionScreen(_services),
             "shifts" => new ShiftScreen(_services),
             "reports" => new ReportsScreen(_scopeFactory, _currentUser),
-            "audit-log" => new AuditLogScreen(_scopeFactory, _currentUser),
+            "audit-log" => new AuditLogScreen(_services),
             "settings" => new SettingsScreen(_services),
             "backup" => new BackupScreen(_services),
             _ => BuildPlaceholder(title),

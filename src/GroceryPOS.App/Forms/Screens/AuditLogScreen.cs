@@ -3,6 +3,9 @@ using GroceryPOS.App.Forms.Shared;
 using GroceryPOS.Application.Abstractions;
 using GroceryPOS.Application.Auditing;
 using GroceryPOS.Application.Reports;
+using GroceryPOS.Presentation.Auditing;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
@@ -19,15 +22,13 @@ namespace GroceryPOS.App.Forms.Screens;
 
 /// <summary>
 /// Nhật ký hệ thống (<c>auditlog.view</c>): period, group, severity and user filters over a server-paged grid
-/// (search box = username / object / details), KPI cards for the period (click one to filter), a detail card for the
-/// selected entry with "same user" / "same object" shortcuts, and Excel export of everything that matches (audited).
-/// F5 reloads, Ctrl+E exports.
+/// (search box = username / object / details), KPI cards for the period (click one to filter exactly what it counts), a
+/// detail card for the selected entry with "same user" / "same object" shortcuts, and Excel export of everything that
+/// matches (audited). F5 reloads, Ctrl+E exports. Passive MVP view – the logic lives in <see cref="AuditLogPresenter"/>.
 /// </summary>
-internal sealed class AuditLogScreen : UserControl
+internal sealed class AuditLogScreen : BaseUserControl, IAuditLogView
 {
-    private const string Caption = "Nhật ký hệ thống";
-
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly AuditLogPresenter _presenter;
     private readonly ModernDateRangePicker _period;
     private readonly ModernComboBox _category;
     private readonly ModernComboBox _severity;
@@ -41,7 +42,6 @@ internal sealed class AuditLogScreen : UserControl
 
     private readonly ModernDataGrid _grid;
 
-    private readonly ModernCard _detailCard;
     private readonly ToneLabel _detailAction;
     private readonly Label _detailTime;
     private readonly Label _detailUser;
@@ -54,39 +54,31 @@ internal sealed class AuditLogScreen : UserControl
 
     private bool _suppressFilterEvents;
 
-    public AuditLogScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public AuditLogScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _ = currentUser; // the menu entry is gated by auditlog.view; the service re-checks every call.
-        Dock = DockStyle.Fill;
+        _presenter = services.GetRequiredService<AuditLogPresenter>();
 
         // ---- Header: filters + actions -------------------------------------------------------------------
         _period = new ModernDateRangePicker();
         _period.Initialize(DatePreset.Last7Days);
-        _period.RangeChanged += (_, _) => OnFiltersChanged(reloadSummary: true);
-
-        var categories = new List<Option<AuditCategory?>> { new(null, "Tất cả nhóm") };
-        categories.AddRange(AuditCatalog.Categories.Select(c => new Option<AuditCategory?>(c, AuditCatalog.CategoryName(c))));
-        _category = Filter(210, categories);
-
-        _severity = Filter(170, new List<Option<AuditSeverity?>>
+        _period.RangeChanged += async (_, _) =>
         {
-            new(null, "Mọi mức độ"),
-            new(AuditSeverity.Warning, "Từ cần chú ý"),
-            new(AuditSeverity.Critical, "Chỉ quan trọng"),
-        });
+            if (!_suppressFilterEvents)
+            {
+                await _presenter.SetPeriodAsync(CurrentPeriod, _period.Describe());
+            }
+        };
 
-        _user = Filter(170, new List<Option<string?>> { new(null, "Mọi người dùng") });
+        _category = Filter(210, AuditLogPresenter.CategoryOptions);
+        _severity = Filter(170, AuditLogPresenter.SeverityOptions);
+        _user = Filter(170, UserOptions([]));
+        _category.SelectedIndexChanged += (_, _) => { if (!_suppressFilterEvents) _presenter.SetCategory(_category.SelectedValue as AuditCategory?); };
+        _severity.SelectedIndexChanged += (_, _) => { if (!_suppressFilterEvents) _presenter.SetSeverity(_severity.SelectedValue as AuditSeverity?); };
+        _user.SelectedIndexChanged += (_, _) => { if (!_suppressFilterEvents) _presenter.SetUser(_user.SelectedValue as string); };
 
-        foreach (var filter in new[] { _category, _severity, _user })
-        {
-            filter.SelectedIndexChanged += (_, _) => OnFiltersChanged(reloadSummary: false);
-        }
-
-
-        var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAllAsync);
-        var export = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, ExportAsync);
-        var clear = Action("Bỏ lọc", Glyphs.Clear, ButtonVariant.Secondary, () => { ClearFilters(); return Task.CompletedTask; });
+        var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, RefreshDataAsync);
+        var export = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, _presenter.ExportAsync);
+        var clear = Action("Bỏ lọc", Glyphs.Clear, ButtonVariant.Secondary, () => { _presenter.ClearFilters(); return Task.CompletedTask; });
         var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
         actions.Controls.AddRange([clear, refresh, export]);
 
@@ -94,14 +86,13 @@ internal sealed class AuditLogScreen : UserControl
         var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(24, 16, 24, 0) };
         header.Controls.AddRange([_period, _category, _severity, _user, actions]);
 
-        // ---- KPI row (click = filter) ----------------------------------------------------------------------
-        _total = Stat("Tổng sự kiện", Glyphs.History, BadgeKind.Primary, () => ApplyQuickFilter(null, null));
-        _security = Stat("Đăng nhập thất bại", Glyphs.Lock, BadgeKind.Warning, () => ApplyQuickFilter(AuditCategory.Authentication, AuditSeverity.Warning));
-        _salesExceptions = Stat("Hủy HĐ · trả hàng · in lại", Glyphs.Return, BadgeKind.Danger, () => ApplyQuickFilter(AuditCategory.Sales, AuditSeverity.Warning));
-        _stockAndPrice = Stat("Đổi giá · chỉnh kho", Glyphs.Package, BadgeKind.Info, () => ApplyQuickFilter(null, AuditSeverity.Warning));
-        _status = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 100, 0, 0), Font = ThemeFonts.Get(FontRole.Caption) };
+        // ---- KPI row (click = filter exactly what the card counts) ------------------------------------------
+        _total = Stat("Tổng sự kiện", Glyphs.History, AuditQuickFilter.None);
+        _security = Stat("Đăng nhập thất bại", Glyphs.Lock, AuditQuickFilter.Security);
+        _salesExceptions = Stat("Hủy HĐ · trả hàng · in lại", Glyphs.Return, AuditQuickFilter.SalesExceptions);
+        _stockAndPrice = Stat("Đổi giá · chỉnh kho", Glyphs.Package, AuditQuickFilter.StockAndPrice);
         var stats = new StatCardRow { CardHeight = 120, MinCardWidth = 180, Padding = new Padding(24, 4, 24, 12) };
-        stats.AddCards(_total, _security, _salesExceptions, _stockAndPrice, _status);
+        stats.AddCards(_total, _security, _salesExceptions, _stockAndPrice);
 
         // ---- Grid (server-paged) --------------------------------------------------------------------------
         _grid = new ModernDataGrid
@@ -118,11 +109,15 @@ internal sealed class AuditLogScreen : UserControl
         NotSortable(_grid.AddTextColumn(nameof(AuditLogEntryDto.Details), "Chi tiết"));
         NotSortable(_grid.AddTextColumn(nameof(AuditLogEntryDto.SeverityName), "Mức độ", width: 100));
         _grid.InnerGrid.CellFormatting += ToneSeverityCells;
-        _grid.SelectionChanged += (_, _) => ShowDetail(_grid.GetSelected<AuditLogEntryDto>());
-        _grid.LoadFailed += (_, e) => SetStatus($"Không tải được nhật ký: {e.Exception?.Message}", LabelTone.Danger);
+        _grid.SelectionChanged += (_, _) => _presenter.Select(_grid.GetSelected<AuditLogEntryDto>());
+        _grid.LoadFailed += (_, e) => ShowStatusText($"Không tải được nhật ký: {e.Exception?.Message}", LabelTone.Danger);
+
+        // Status under the list: period, match count, active filters (two lines when filtered).
+        _status = new ToneLabel { Dock = DockStyle.Bottom, Height = 44, AutoSize = false, Tone = LabelTone.Muted, Font = ThemeFonts.Get(FontRole.Caption), Padding = new Padding(0, 6, 0, 0), AutoEllipsis = true };
 
         var gridCard = new ModernCard { Title = "Sự kiện", HeaderGlyph = Glyphs.List, Dock = DockStyle.Fill, Margin = new Padding(0, 0, 16, 0) };
         gridCard.Controls.Add(_grid);
+        gridCard.Controls.Add(_status);
 
         // ---- Detail card ----------------------------------------------------------------------------------
         _detailAction = new ToneLabel { AutoSize = false, Dock = DockStyle.Top, Height = 32, Font = ThemeFonts.Get(FontRole.Subtitle), AutoEllipsis = true };
@@ -154,292 +149,75 @@ internal sealed class AuditLogScreen : UserControl
 
         _grid.RowActivated += (_, _) => _detailText.Focus();
 
-        _sameUser = Action("Cùng người dùng", Glyphs.People, ButtonVariant.Secondary, () => { FilterBySelectedUser(); return Task.CompletedTask; });
-        _sameEntity = Action("Cùng đối tượng", Glyphs.Filter, ButtonVariant.Secondary, () => { FilterBySelectedEntity(); return Task.CompletedTask; });
+        _sameUser = Action("Cùng người dùng", Glyphs.People, ButtonVariant.Secondary, () => { _presenter.FilterBySelectedUser(); return Task.CompletedTask; });
+        _sameEntity = Action("Cùng đối tượng", Glyphs.Filter, ButtonVariant.Secondary, () => { _presenter.FilterBySelectedEntity(); return Task.CompletedTask; });
         var detailActions = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 52, WrapContents = false, Padding = new Padding(0, 8, 0, 0) };
         detailActions.Controls.AddRange([_sameUser, _sameEntity]);
 
-        _detailCard = new ModernCard { Title = "Chi tiết sự kiện", HeaderGlyph = Glyphs.Info, Dock = DockStyle.Fill };
-        _detailCard.Controls.Add(_detailText);
-        _detailCard.Controls.Add(detailsCaption);
-        _detailCard.Controls.Add(fields);
-        _detailCard.Controls.Add(_detailAction);
-        _detailCard.Controls.Add(detailActions);
+        var detailCard = new ModernCard { Title = "Chi tiết sự kiện", HeaderGlyph = Glyphs.Info, Dock = DockStyle.Fill };
+        detailCard.Controls.Add(_detailText);
+        detailCard.Controls.Add(detailsCaption);
+        detailCard.Controls.Add(fields);
+        detailCard.Controls.Add(_detailAction);
+        detailCard.Controls.Add(detailActions);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(24, 0, 24, 24) };
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
         body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         body.Controls.Add(gridCard, 0, 0);
-        body.Controls.Add(_detailCard, 1, 0);
+        body.Controls.Add(detailCard, 1, 0);
 
         Controls.Add(body);
         Controls.Add(stats);
         Controls.Add(header);
 
-        ShowDetail(null);
-        Load += async (_, _) =>
+        _presenter.Attach(this);
+    }
+
+    /// <summary>First show and F5: today may have moved on (presets are relative), then everything reloads.</summary>
+    public override Task RefreshDataAsync()
+    {
+        _suppressFilterEvents = true;
+        try
         {
-            await LoadUsersAsync();
-            await LoadSummaryAsync();
-            _grid.DataProvider = LoadPageAsync; // first page loads here
-        };
+            _period.RefreshToday();
+        }
+        finally
+        {
+            _suppressFilterEvents = false;
+        }
+
+        return _presenter.LoadAsync(CurrentPeriod, _period.Describe());
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        switch (keyData)
+        if (keyData == (Keys.Control | Keys.E) && !IsBusy)
         {
-            case Keys.F5:
-                _ = ReloadAllAsync();
-                return true;
-            case Keys.Control | Keys.E:
-                _ = ExportAsync();
-                return true;
+            _ = _presenter.ExportAsync();
+            return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    // ---- Query building ------------------------------------------------------------------------------------
-
     private ReportPeriod CurrentPeriod => new(_period.Range.From, _period.Range.To);
 
-    private AuditLogQuery BuildQuery(GridQuery? grid = null)
+    private async Task<GridPage<object>> LoadPageAsync(GridQuery query, CancellationToken cancellationToken)
     {
-        var gridQuery = grid ?? _grid.Query;
-        return new AuditLogQuery(
-            CurrentPeriod,
-            Category: _category.SelectedValue as AuditCategory?,
-            MinSeverity: _severity.SelectedValue as AuditSeverity?,
-            Username: _user.SelectedValue as string,
-            Search: gridQuery.Search,
-            OldestFirst: gridQuery.IsSorted && gridQuery.SortKey == nameof(AuditLogEntryDto.Time) && gridQuery.SortDirection == SortDirection.Ascending,
-            PageIndex: gridQuery.PageIndex,
-            PageSize: gridQuery.PageSize);
+        var request = ToRequest(query);
+        var page = await _presenter.LoadPageAsync(request, cancellationToken);
+        return page is null
+            ? GridPage<object>.Empty(query.PageSize)
+            : new GridPage<object>(page.Items.Cast<object>().ToList(), page.TotalCount, page.PageIndex, page.PageSize);
     }
 
-    private async Task<GridPage<object>> LoadPageAsync(GridQuery gridQuery, CancellationToken cancellationToken)
-    {
-        var query = BuildQuery(gridQuery);
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IAuditLogService>().SearchAsync(query, cancellationToken);
-        if (result.IsFailure)
-        {
-            SetStatus(result.Error.Message, LabelTone.Danger);
-            return GridPage<object>.Empty(gridQuery.PageSize);
-        }
-
-        var page = result.Value;
-        SetStatus($"{_period.Describe()} · {Number(page.TotalCount)} sự kiện khớp bộ lọc · cập nhật lúc {DateTime.Now:HH:mm}");
-        return new GridPage<object>(page.Items.Cast<object>().ToList(), page.TotalCount, page.PageIndex, page.PageSize);
-    }
-
-    private async Task LoadSummaryAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IAuditLogService>().GetSummaryAsync(CurrentPeriod);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            SetStatus(result.Error.Message, LabelTone.Danger);
-            return;
-        }
-
-        var s = result.Value;
-        _total.Value = Number(s.Total);
-        _total.Note = $"{Number(s.Critical)} quan trọng · {Number(s.Warning)} cần chú ý";
-        _security.Value = Number(s.FailedLogins + s.AccountsLocked);
-        _security.Accent = s.AccountsLocked > 0 ? BadgeKind.Danger : BadgeKind.Warning;
-        _security.Note = s.AccountsLocked > 0 ? $"{Number(s.AccountsLocked)} lần khóa tài khoản" : "Không có tài khoản bị khóa";
-        _salesExceptions.Value = Number(s.SalesExceptions);
-        _salesExceptions.Note = $"Hủy {Number(s.SalesVoided)} · trả {Number(s.Returns)} · in lại {Number(s.Reprints)}";
-        _stockAndPrice.Value = Number(s.StockAndPrice);
-        _stockAndPrice.Note = $"Đổi giá {Number(s.PriceChanges)} · kho {Number(s.StockAdjustments)}";
-    }
-
-    private async Task LoadUsersAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IAuditLogService>().ListUsernamesAsync();
-        if (IsDisposed || result.IsFailure)
-        {
-            return;
-        }
-
-        var current = _user.SelectedValue as string;
-        var options = new List<Option<string?>> { new(null, "Mọi người dùng") };
-        options.AddRange(result.Value.Select(u => new Option<string?>(u, u)));
-        _suppressFilterEvents = true;
-        try
-        {
-            _user.DataSource = options;
-            SelectUser(current);
-        }
-        finally
-        {
-            _suppressFilterEvents = false;
-        }
-    }
-
-    private void OnFiltersChanged(bool reloadSummary)
-    {
-        if (_suppressFilterEvents || _grid.DataProvider is null)
-        {
-            return;
-        }
-
-        if (_grid.Query.PageIndex > 0)
-        {
-            _grid.GoToPage(0); // reloads
-        }
-        else
-        {
-            _grid.Reload();
-        }
-        if (reloadSummary)
-        {
-            _ = LoadSummaryAsync();
-        }
-    }
-
-    private async Task ReloadAllAsync()
-    {
-        _period.RefreshToday();
-        await LoadUsersAsync();
-        await LoadSummaryAsync();
-        _grid.Reload();
-    }
-
-    private void ApplyQuickFilter(AuditCategory? category, AuditSeverity? severity)
-    {
-        _suppressFilterEvents = true;
-        try
-        {
-            _category.SelectedValue = category!;
-            _severity.SelectedValue = severity!;
-            if (category is null)
-            {
-                _category.SelectedIndex = 0;
-            }
-
-            if (severity is null)
-            {
-                _severity.SelectedIndex = 0;
-            }
-        }
-        finally
-        {
-            _suppressFilterEvents = false;
-        }
-
-        OnFiltersChanged(reloadSummary: false);
-    }
-
-    private void ClearFilters()
-    {
-        _suppressFilterEvents = true;
-        try
-        {
-            _category.SelectedIndex = 0;
-            _severity.SelectedIndex = 0;
-            _user.SelectedIndex = 0;
-            _grid.ClearSearch();
-        }
-        finally
-        {
-            _suppressFilterEvents = false;
-        }
-
-        OnFiltersChanged(reloadSummary: false);
-    }
-
-    private void FilterBySelectedUser()
-    {
-        if (_grid.GetSelected<AuditLogEntryDto>() is not { } entry)
-        {
-            return;
-        }
-
-        _suppressFilterEvents = true;
-        try
-        {
-            SelectUser(entry.Username);
-        }
-        finally
-        {
-            _suppressFilterEvents = false;
-        }
-
-        OnFiltersChanged(reloadSummary: false);
-    }
-
-    private void FilterBySelectedEntity()
-    {
-        if (_grid.GetSelected<AuditLogEntryDto>() is { EntityId: { Length: > 0 } id })
-        {
-            _grid.SetSearch(id);
-        }
-    }
-
-    private void SelectUser(string? username)
-    {
-        if (username is null)
-        {
-            _user.SelectedIndex = 0;
-            return;
-        }
-
-        _user.SelectedValue = username;
-        if (!Equals(_user.SelectedValue, username))
-        {
-            _user.SelectedIndex = 0;
-        }
-    }
-
-    // ---- Detail ----------------------------------------------------------------------------------------
-
-    private void ShowDetail(AuditLogEntryDto? entry)
-    {
-        if (entry is null)
-        {
-            _detailAction.Text = "Chọn một sự kiện";
-            _detailAction.Tone = LabelTone.Muted;
-            foreach (var label in new[] { _detailTime, _detailUser, _detailCategory, _detailSeverity, _detailEntity })
-            {
-                label.Text = "–";
-            }
-
-            _detailText.Text = string.Empty;
-            _sameUser.Enabled = false;
-            _sameEntity.Enabled = false;
-            return;
-        }
-
-        _detailAction.Text = entry.ActionName;
-        _detailAction.Tone = Tone(entry.Severity);
-        _detailTime.Text = entry.Time.ToString("dd/MM/yyyy HH:mm:ss");
-        _detailUser.Text = entry.UserId is { } id ? $"{entry.Username} (#{id})" : entry.Username;
-        _detailCategory.Text = entry.CategoryName;
-        _detailSeverity.Text = entry.SeverityName;
-        _detailEntity.Text = entry.Entity ?? "–";
-        _detailText.Text = string.IsNullOrWhiteSpace(entry.Details)
-            ? "(không có nội dung)"
-            : entry.Details.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
-        _sameUser.Enabled = true;
-        _sameEntity.Enabled = !string.IsNullOrEmpty(entry.EntityId);
-    }
-
-    private static LabelTone Tone(AuditSeverity severity) => severity switch
-    {
-        AuditSeverity.Critical => LabelTone.Danger,
-        AuditSeverity.Warning => LabelTone.Warning,
-        _ => LabelTone.Primary,
-    };
+    private static AuditGridRequest ToRequest(GridQuery query) => new(
+        query.Search,
+        OldestFirst: query.IsSorted && query.SortKey == nameof(AuditLogEntryDto.Time) && query.SortDirection == SortDirection.Ascending,
+        query.PageIndex,
+        query.PageSize);
 
     private void ToneSeverityCells(object? sender, DataGridViewCellFormattingEventArgs e)
     {
@@ -455,61 +233,119 @@ internal sealed class AuditLogScreen : UserControl
         }
 
         var palette = ThemeManager.Current.Colors;
-        e.CellStyle!.ForeColor = entry.Severity switch
+        e.CellStyle!.ForeColor = AuditLogDetail.ToneOf(entry.Severity) switch
         {
-            AuditSeverity.Critical => palette.Danger,
-            AuditSeverity.Warning => palette.Warning,
+            Tone.Danger => palette.Danger,
+            Tone.Warning => palette.Warning,
             _ => property == nameof(AuditLogEntryDto.SeverityName) ? palette.TextMuted : e.CellStyle.ForeColor,
         };
     }
 
-    // ---- Export ----------------------------------------------------------------------------------------
-
-    private async Task ExportAsync()
+    private void ShowStatusText(string text, LabelTone tone)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var service = scope.ServiceProvider.GetRequiredService<IAuditLogService>();
-        var result = await LoadingOverlay.RunAsync(this, () => service.ExportAsync(BuildQuery()), "Đang xuất nhật ký…");
-        if (IsDisposed)
+        if (IsAlive)
         {
-            return;
+            _status.Text = text;
+            _status.Tone = tone;
         }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Warning(this, result.Error.Message, Caption);
-            return;
-        }
-
-        var path = await ExcelFiles.SaveAsync(this, Caption, "Lưu nhật ký hệ thống", result.Value.FileName, result.Value.Content);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (path is not null)
-        {
-            SetStatus($"Đã xuất {Path.GetFileName(path)}", LabelTone.Success);
-        }
-
-        _grid.Reload(); // the export itself is now in the log (even when saving was cancelled)
-        _ = LoadSummaryAsync();
     }
+
+    // ---- IAuditLogView -----------------------------------------------------------------------------------
+
+    bool IView.IsAlive => IsAlive;
+
+    void IAuditLogView.ShowUsers(IReadOnlyList<string> usernames)
+    {
+        _suppressFilterEvents = true;
+        try
+        {
+            _user.DataSource = UserOptions(usernames);
+        }
+        finally
+        {
+            _suppressFilterEvents = false;
+        }
+    }
+
+    void IAuditLogView.ShowFilters(AuditLogFilters filters)
+    {
+        _suppressFilterEvents = true;
+        try
+        {
+            Select(_category, filters.Category);
+            Select(_severity, filters.MinSeverity);
+            Select(_user, filters.Username);
+        }
+        finally
+        {
+            _suppressFilterEvents = false;
+        }
+    }
+
+    void IAuditLogView.ShowCards(AuditLogCards cards)
+    {
+        Show(_total, cards.Total);
+        Show(_security, cards.Security);
+        Show(_salesExceptions, cards.SalesExceptions);
+        Show(_stockAndPrice, cards.StockAndPrice);
+    }
+
+    void IAuditLogView.ShowStatus(string text, Tone tone) => ShowStatusText(text, tone.ToLabelTone());
+
+    void IAuditLogView.ShowDetail(AuditLogDetail detail)
+    {
+        _detailAction.Text = detail.Title;
+        _detailAction.Tone = detail.TitleTone.ToLabelTone();
+        _detailTime.Text = detail.Time;
+        _detailUser.Text = detail.User;
+        _detailCategory.Text = detail.Category;
+        _detailSeverity.Text = detail.Severity;
+        _detailEntity.Text = detail.Entity;
+        _detailText.Text = string.Join(Environment.NewLine, detail.Lines);
+        _sameUser.Enabled = detail.CanFilterUser;
+        _sameEntity.Enabled = detail.CanFilterEntity;
+    }
+
+    void IAuditLogView.ReloadEntries(bool firstPage)
+    {
+        if (_grid.DataProvider is null)
+        {
+            _grid.DataProvider = LoadPageAsync; // loads page 1
+        }
+        else if (firstPage && _grid.Query.PageIndex > 0)
+        {
+            _grid.GoToPage(0); // reloads
+        }
+        else
+        {
+            _grid.Reload();
+        }
+    }
+
+    void IAuditLogView.SetSearch(string text) => _grid.SetSearch(text);
+
+    void IAuditLogView.ClearSearch() => _grid.ClearSearch();
+
+    AuditGridRequest IAuditLogView.CurrentGrid => ToRequest(_grid.Query);
+
+    Task<T> IAuditLogView.RunBusyAsync<T>(Func<Task<T>> work, string message) => RunBusyAsync(work, message);
+
+    Task<string?> IAuditLogView.SaveExcelAsync(string suggestedFileName, byte[] content) =>
+        ExcelFiles.SaveAsync(this, AuditLogPresenter.Title, "Lưu nhật ký hệ thống", suggestedFileName, content);
+
+    void IAuditLogView.ToastWarning(string message, string? title) => ToastWarning(message, title);
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) => Confirm(message, title, confirmText, danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
 
     // ---- Building blocks -------------------------------------------------------------------------------
-
-    private void SetStatus(string text, LabelTone tone = LabelTone.Muted)
-    {
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        _status.Text = text;
-        _status.Tone = tone;
-    }
-
-    private static string Number(int value) => value.ToString("#,0", System.Globalization.CultureInfo.GetCultureInfo("vi-VN"));
 
     private static void NotSortable(DataGridViewColumn column) => column.SortMode = DataGridViewColumnSortMode.NotSortable;
 
@@ -520,34 +356,60 @@ internal sealed class AuditLogScreen : UserControl
         return button;
     }
 
-    private static StatCard Stat(string caption, string glyph, BadgeKind accent, System.Action onClick)
+    private StatCard Stat(string caption, string glyph, AuditQuickFilter filter)
     {
+        void OnClick() => _presenter.ApplyQuickFilter(filter);
         var card = new StatCard
         {
             Caption = caption,
             Glyph = glyph,
-            Accent = accent,
             Value = "–",
             Size = new Size(250, 120),
             Margin = new Padding(0, 0, 16, 0),
             Cursor = Cursors.Hand,
         };
-        card.Click += (_, _) => onClick();
+        card.Click += (_, _) => OnClick();
         foreach (Control child in card.Controls)
         {
-            child.Click += (_, _) => onClick();
+            child.Click += (_, _) => OnClick();
         }
 
         return card;
     }
 
-    private static ModernComboBox Filter<T>(int width, IList<Option<T>> options) => new()
+    private static void Show(StatCard card, AuditStatCard state)
+    {
+        card.Value = state.Value;
+        card.Note = state.Note;
+        card.Accent = state.Accent.ToBadgeKind();
+    }
+
+    private static List<FilterOption<string?>> UserOptions(IEnumerable<string> usernames) =>
+        [new(null, "Mọi người dùng"), .. usernames.Select(u => new FilterOption<string?>(u, u))];
+
+    /// <summary>Selects <paramref name="value"/>, or the first ("Tất cả…") entry when it is null or not listed.</summary>
+    private static void Select<T>(ModernComboBox combo, T? value)
+    {
+        if (value is null)
+        {
+            combo.SelectedIndex = combo.Items.Count > 0 ? 0 : -1;
+            return;
+        }
+
+        combo.SelectedValue = value;
+        if (!Equals(combo.SelectedValue, value))
+        {
+            combo.SelectedIndex = combo.Items.Count > 0 ? 0 : -1;
+        }
+    }
+
+    private static ModernComboBox Filter<T>(int width, IReadOnlyList<FilterOption<T>> options) => new()
     {
         Width = width,
         DropDownStyle = ComboBoxStyle.DropDownList,
         ReserveMessageSpace = false,
-        DisplayMember = nameof(Option<T>.Name),
-        ValueMember = nameof(Option<T>.Value),
+        DisplayMember = nameof(FilterOption<T>.Name),
+        ValueMember = nameof(FilterOption<T>.Value),
         DataSource = options,
         Margin = new Padding(8, 0, 0, 0),
     };
@@ -562,6 +424,4 @@ internal sealed class AuditLogScreen : UserControl
         table.Controls.Add(label, 0, table.RowCount - 1);
         table.Controls.Add(value, 1, table.RowCount - 1);
     }
-
-    private sealed record Option<T>(T Value, string Name);
 }

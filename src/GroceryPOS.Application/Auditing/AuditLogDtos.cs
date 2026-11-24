@@ -9,6 +9,8 @@ namespace GroceryPOS.Application.Auditing;
 /// the action keys, <paramref name="MinSeverity"/> keeps only actions of that severity or higher,
 /// <paramref name="Username"/> is an exact username and <paramref name="Search"/> a substring of the username,
 /// object id or details. <paramref name="PageIndex"/> is zero-based and clamped to the last page.
+/// <paramref name="Actions"/> (optional) keeps only these action keys – the KPI-card shortcuts, e.g. price changes + stock
+/// adjustments, which share no single group or severity.
 /// </summary>
 public sealed record AuditLogQuery(
     ReportPeriod Period,
@@ -19,7 +21,8 @@ public sealed record AuditLogQuery(
     string? Search = null,
     bool OldestFirst = false,
     int PageIndex = 0,
-    int PageSize = AuditLogQuery.DefaultPageSize)
+    int PageSize = AuditLogQuery.DefaultPageSize,
+    IReadOnlyCollection<string>? Actions = null)
 {
     public const int DefaultPageSize = 50;
     public const int MaxPageSize = 200;

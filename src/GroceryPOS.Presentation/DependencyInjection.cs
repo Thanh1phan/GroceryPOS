@@ -1,3 +1,4 @@
+using GroceryPOS.Presentation.Auditing;
 using GroceryPOS.Presentation.Backup;
 using GroceryPOS.Presentation.Catalog;
 using GroceryPOS.Presentation.Inventory;
@@ -39,6 +40,7 @@ public static class DependencyInjection
         services.AddTransient<ShiftPresenter>();
         services.AddTransient<SettingsPresenter>();
         services.AddTransient<BackupPresenter>();
+        services.AddTransient<AuditLogPresenter>();
         return services;
     }
 }
