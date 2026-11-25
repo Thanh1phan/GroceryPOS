@@ -194,7 +194,7 @@ public sealed class MainForm : Form
 
         Control screen = key switch
         {
-            "dashboard" => new DashboardScreen(_scopeFactory, _currentUser, Navigate),
+            "dashboard" => new DashboardScreen(_services, Navigate),
             "pos" => new PosScreen(_scopeFactory, _currentUser),
             "returns" => new ReturnScreen(_scopeFactory, _currentUser),
             "categories" => new CategoryListScreen(_services),

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-25
+- **Tổng quan** moved to MVP: `Presentation.Dashboard.DashboardPresenter` (today's figures and the user's drawer loaded in one scope with "latest wins", one-minute auto-refresh, F5, quick actions and F2 / low-stock row opening other screens only with permission). Cards, charts, lists and subtitles come from the tested `DashboardBoard` and `DashboardShiftCard`; `DashboardScreen` is now a passive `BaseUserControl` view resolved through DI.
+- A failed refresh no longer replaces the subtitle with a bare error over stale numbers: the last good figures stay and the subtitle turns amber ("Không cập nhật được lúc 10:03 · đang hiển thị số liệu lúc 10:00"); F5 also shows an error toast, the minute timer does not (no toast every minute while the database is unreachable).
+- The "Ca của bạn" card now flags a shift left open 12 hours or more in amber ("Đã mở 14 giờ (từ 20:00 19/11) · nhớ kết ca"), and shows the opening time in store time instead of the machine's time zone.
+- Fixes: when today's figures failed to load the shift card was never updated (it now still shows the drawer); F5 pressed during an automatic refresh could let the older answer arrive last and win (now the newest load wins, and the timer skips its tick while a load runs); quick-action buttons size to their caption instead of a fixed width.
+- 18 new presenter tests (Domain 149, Application 490, Infrastructure 63, UI.Controls 440, Presentation 343 – all passing).
+
 ## 2026-11-24
 - **Nhật ký hệ thống** moved to MVP: `Presentation.Auditing.AuditLogPresenter` (period / group / severity / user filters, KPI-card shortcuts, server-paged list, detail card with Cùng người dùng / Cùng đối tượng, Xuất Excel Ctrl+E). Cards and detail come from the tested `AuditLogCards` / `AuditLogDetail`; `AuditLogScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - Fix: the "Đổi giá · chỉnh kho" card listed **every** warning (returns, failed logins, reprints…) instead of price changes and stock adjustments. Each card now filters exactly the actions it counts (new optional `AuditLogQuery.Actions`), so the card number and the list agree; choosing a group or severity ends the shortcut.
