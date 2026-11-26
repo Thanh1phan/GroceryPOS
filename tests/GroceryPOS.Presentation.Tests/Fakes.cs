@@ -8,6 +8,7 @@ using GroceryPOS.Application.Inventory;
 using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
+using GroceryPOS.Application.Reports.Export;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
@@ -248,6 +249,8 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IAuditLogService>(sp => sp.GetRequiredService<FakeAuditLogService>());
         services.AddSingleton(Reports);
         services.AddScoped<IReportService>(sp => sp.GetRequiredService<FakeReportService>());
+        services.AddSingleton(ReportExports);
+        services.AddScoped<IReportExportService>(sp => sp.GetRequiredService<FakeReportExportService>());
         services.AddSingleton<TimeProvider>(Clock);
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -284,6 +287,8 @@ internal sealed class TestHost : IDisposable
     public FakeAuditLogService AuditLogs { get; } = new();
 
     public FakeReportService Reports { get; } = new();
+
+    public FakeReportExportService ReportExports { get; } = new();
 
     public FixedClock Clock { get; } = new();
 

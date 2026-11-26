@@ -1,18 +1,20 @@
 using GroceryPOS.App.Forms.Pos;
 using GroceryPOS.App.Forms.Shared;
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Catalog;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Reports.Export;
+using GroceryPOS.Presentation.Auditing;
+using GroceryPOS.Presentation.Dashboard;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Reports;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
 using GroceryPOS.UI.Controls.Display.Core;
 using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
-using GroceryPOS.UI.Controls.Inputs.Core;
 using GroceryPOS.UI.Controls.Navigation;
 using GroceryPOS.UI.Controls.Theming;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,24 +24,16 @@ namespace GroceryPOS.App.Forms.Reports;
 /// <summary>
 /// Báo cáo: one period picker for four tabs – Doanh thu (KPI cards vs. the previous period, daily/monthly chart,
 /// day table), Hàng bán chạy (rank by quantity/revenue/profit, category, top N), Lợi nhuận theo danh mục (chart +
-/// table) and Giá trị tồn kho (current stock, ignores the period). Only the visible tab is loaded; the others
-/// reload when shown after a filter change. Xuất Excel (Ctrl+E) exports the current tab, "Xuất tất cả" every tab
-/// as one workbook (sheet per report, audited). In / PDF (Ctrl+P) opens an A4 print preview of the current tab
-/// (Ctrl+Shift+P: every tab) that prints or saves a PDF, audited as report.printed. F5 reloads.
+/// table) and Giá trị tồn kho (current stock, ignores the period). Xuất Excel (Ctrl+E) exports the current tab,
+/// "Xuất tất cả" every tab; In / PDF (Ctrl+P, Ctrl+Shift+P for every tab) opens the A4 print preview. F5 reloads.
+/// Passive MVP view – the logic lives in <see cref="ReportsPresenter"/>.
 /// </summary>
-internal sealed class ReportsScreen : UserControl
+internal sealed class ReportsScreen : BaseUserControl, IReportsView
 {
-    private const int RevenueTab = 0;
-    private const int BestSellerTab = 1;
-    private const int ProfitTab = 2;
-    private const int InventoryTab = 3;
-    private const string Caption = "Báo cáo";
-
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ReportsPresenter _presenter;
     private readonly ModernDateRangePicker _period;
     private readonly ToneLabel _status;
     private readonly ModernTabControl _tabs;
-    private readonly bool[] _stale = [true, true, true, true];
 
     // Revenue tab.
     private readonly StatCard _netRevenue;
@@ -69,28 +63,32 @@ internal sealed class ReportsScreen : UserControl
     private readonly StatCard _stockAlerts;
     private readonly ModernDataGrid _inventoryGrid;
 
-    private bool _loading;
-    private bool _loadingFilters;
-    private int _filterVersion;
+    private IDisposable? _loadingOverlay;
+    private bool _suppressEvents;
 
-    public ReportsScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public ReportsScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _ = currentUser; // menu entry is already gated by reports.view; the services re-check every call.
-        Dock = DockStyle.Fill;
+        _presenter = services.GetRequiredService<ReportsPresenter>();
+        RefreshOnF5 = false; // F5 also moves the period to today (handled below)
 
         // ---- Header: period + actions ------------------------------------------------------------------
         _period = new ModernDateRangePicker { Margin = new Padding(0, 0, 0, 0) };
-        _period.RangeChanged += async (_, _) => await OnFiltersChangedAsync(includingInventory: false);
+        _period.RangeChanged += async (_, _) =>
+        {
+            if (!_suppressEvents)
+            {
+                await _presenter.SetPeriodAsync(CurrentPeriod, _period.Describe());
+            }
+        };
         _status = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(12, 12, 0, 0), Font = ThemeFonts.Get(FontRole.Caption) };
 
         var left = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 16, 8) };
         left.Controls.AddRange([_period, _status]);
 
-        var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, ReloadAllAsync);
-        var exportOne = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, () => ExportAsync(all: false));
-        var exportAll = Action("Xuất tất cả", Glyphs.List, ButtonVariant.Secondary, () => ExportAsync(all: true));
-        var print = Action("In / PDF (Ctrl+P)", Glyphs.Print, ButtonVariant.Secondary, () => PrintAsync(all: false));
+        var refresh = Action("Làm mới (F5)", Glyphs.Refresh, ButtonVariant.Ghost, RefreshDataAsync);
+        var exportOne = Action("Xuất Excel (Ctrl+E)", Glyphs.Document, ButtonVariant.Primary, () => _presenter.ExportAsync(all: false));
+        var exportAll = Action("Xuất tất cả", Glyphs.List, ButtonVariant.Secondary, () => _presenter.ExportAsync(all: true));
+        var print = Action("In / PDF (Ctrl+P)", Glyphs.Print, ButtonVariant.Secondary, () => _presenter.PrintAsync(all: false));
         var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
         actions.Controls.AddRange([refresh, print, exportAll, exportOne]);
 
@@ -99,14 +97,14 @@ internal sealed class ReportsScreen : UserControl
         header.Controls.AddRange([left, actions]);
 
         // ---- Tab 1: revenue -------------------------------------------------------------------------------
-        _netRevenue = Stat("Doanh thu thuần", Glyphs.Money, BadgeKind.Success);
-        _invoiceCount = Stat("Số hóa đơn", Glyphs.Document, BadgeKind.Primary);
-        _grossProfit = Stat("Lợi nhuận gộp", Glyphs.Chart, BadgeKind.Info);
-        _refunds = Stat("Hoàn trả & hủy", Glyphs.Return, BadgeKind.Warning);
+        _netRevenue = Stat(RevenueBoard.NetRevenueCaption, Glyphs.Money, BadgeKind.Success);
+        _invoiceCount = Stat(RevenueBoard.InvoicesCaption, Glyphs.Document, BadgeKind.Primary);
+        _grossProfit = Stat(RevenueBoard.ProfitCaption, Glyphs.Chart, BadgeKind.Info);
+        _refunds = Stat(RevenueBoard.RefundsCaption, Glyphs.Return, BadgeKind.Warning);
         var revenueStats = new StatCardRow { Padding = new Padding(0, 0, 0, 12) };
         revenueStats.AddCards(_netRevenue, _invoiceCount, _grossProfit, _refunds);
 
-        _revenueChart = new BarChart { Dock = DockStyle.Fill, EmptyText = "Không có doanh thu trong kỳ này", TooltipFormatter = Vnd.Format };
+        _revenueChart = new BarChart { Dock = DockStyle.Fill, EmptyText = "Không có doanh thu trong kỳ này", TooltipFormatter = Vnd.Format, ValueFormatter = ReportText.ShortMoney };
         _revenueChartCard = Card("Doanh thu thuần", Glyphs.Chart, _revenueChart);
 
         _revenueGrid = Grid("Không có dữ liệu.", search: false);
@@ -136,19 +134,20 @@ internal sealed class ReportsScreen : UserControl
         revenuePage.Controls.Add(revenueStats);
 
         // ---- Tab 2: best sellers --------------------------------------------------------------------------
-        _rankBy = Filter(150, [new Option<ProductRanking>(ProductRanking.Quantity, "Theo số lượng"), new(ProductRanking.Revenue, "Theo doanh thu"), new(ProductRanking.Profit, "Theo lợi nhuận")]);
-        _category = Filter(200, new List<Option<int?>> { new(null, "Tất cả danh mục") });
-        _top = Filter(110, [new Option<int>(10, "Top 10"), new(20, "Top 20"), new(50, "Top 50"), new(100, "Top 100")]);
-        _top.SelectedIndex = 1;
+        _rankBy = Filter(150, ReportsPresenter.RankOptions);
+        _category = Filter(200, new List<FilterOption<int?>> { ReportsPresenter.AllCategories });
+        _top = Filter(110, ReportsPresenter.TopOptions);
+        _top.SelectedIndex = ReportsPresenter.TopOptions.ToList().FindIndex(o => o.Value == ReportsPresenter.DefaultTop);
         foreach (var filter in new[] { _rankBy, _category, _top })
         {
             filter.SelectedIndexChanged += async (_, _) =>
             {
-                if (!_loadingFilters)
+                if (!_suppressEvents)
                 {
-                    _filterVersion++;
-                    _stale[BestSellerTab] = true;
-                    await ReloadTabAsync(BestSellerTab);
+                    await _presenter.SetBestSellerFiltersAsync(
+                        _rankBy.SelectedValue is ProductRanking r ? r : ReportsPresenter.DefaultRankBy,
+                        _top.SelectedValue is int t ? t : ReportsPresenter.DefaultTop,
+                        _category.SelectedValue as int?);
                 }
             };
         }
@@ -173,7 +172,7 @@ internal sealed class ReportsScreen : UserControl
         bestPage.Controls.Add(_bestCard);
 
         // ---- Tab 3: profit by category --------------------------------------------------------------------
-        _profitChart = new BarChart { Dock = DockStyle.Fill, ShowValues = true, ValueFormatter = ShortMoney, TooltipFormatter = Vnd.Format, EmptyText = "Chưa có lợi nhuận trong kỳ này" };
+        _profitChart = new BarChart { Dock = DockStyle.Fill, ShowValues = true, ValueFormatter = ReportText.ShortMoney, TooltipFormatter = Vnd.Format, EmptyText = "Chưa có lợi nhuận trong kỳ này" };
         _profitChartCard = Card("Lợi nhuận gộp theo danh mục", Glyphs.Chart, _profitChart);
         _profitGrid = Grid("Không có dữ liệu.", search: false);
         _profitGrid.AddTextColumn(nameof(CategoryProfitRowDto.CategoryName), "Danh mục");
@@ -196,10 +195,10 @@ internal sealed class ReportsScreen : UserControl
         profitPage.Controls.Add(profitBody);
 
         // ---- Tab 4: inventory value ----------------------------------------------------------------------
-        _costValue = Stat("Giá trị tồn (giá vốn)", Glyphs.Package, BadgeKind.Primary);
-        _retailValue = Stat("Giá trị tồn (giá bán)", Glyphs.Money, BadgeKind.Success);
-        _potentialProfit = Stat("Lãi dự kiến", Glyphs.Chart, BadgeKind.Info);
-        _stockAlerts = Stat("Hết / sắp hết hàng", Glyphs.Warning, BadgeKind.Warning);
+        _costValue = Stat(InventoryBoard.CostCaption, Glyphs.Package, BadgeKind.Primary);
+        _retailValue = Stat(InventoryBoard.RetailCaption, Glyphs.Money, BadgeKind.Success);
+        _potentialProfit = Stat(InventoryBoard.PotentialCaption, Glyphs.Chart, BadgeKind.Info);
+        _stockAlerts = Stat(InventoryBoard.AlertsCaption, Glyphs.Warning, BadgeKind.Warning);
         var inventoryStats = new StatCardRow { Padding = new Padding(0, 0, 0, 12) };
         inventoryStats.AddCards(_costValue, _retailValue, _potentialProfit, _stockAlerts);
 
@@ -226,15 +225,9 @@ internal sealed class ReportsScreen : UserControl
         _tabs.TabPages.Add(inventoryPage);
         _tabs.SelectedIndexChanged += async (_, _) =>
         {
-            if (!IsHandleCreated)
+            if (IsHandleCreated && _tabs.SelectedIndex >= 0)
             {
-                return; // the first page being added; Load does the initial query
-            }
-
-            UpdatePeriodHint();
-            if (_stale[_tabs.SelectedIndex])
-            {
-                await ReloadTabAsync(_tabs.SelectedIndex);
+                await _presenter.SelectTabAsync((ReportTab)_tabs.SelectedIndex);
             }
         };
 
@@ -244,35 +237,180 @@ internal sealed class ReportsScreen : UserControl
         Controls.Add(body);
         Controls.Add(header);
 
-        Load += async (_, _) =>
-        {
-            await LoadCategoriesAsync();
-            await ReloadTabAsync(_tabs.SelectedIndex);
-        };
+        _presenter.Attach(this);
     }
+
+    private ReportPeriod CurrentPeriod => new(_period.Range.From, _period.Range.To);
+
+    /// <summary>F5 / Làm mới: moves a "today"-based period to today, then reloads every tab.</summary>
+    public override Task RefreshDataAsync()
+    {
+        _suppressEvents = true;
+        try
+        {
+            _period.RefreshToday();
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
+
+        return _presenter.RefreshAsync(CurrentPeriod, _period.Describe());
+    }
+
+    protected override Task OnFirstLoadAsync() => _presenter.LoadAsync(CurrentPeriod, _period.Describe());
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        switch (keyData)
+        if (!IsBusy)
         {
-            case Keys.F5:
-                _ = ReloadAllAsync();
-                return true;
-            case Keys.Control | Keys.E:
-                _ = ExportAsync(all: false);
-                return true;
-            case Keys.Control | Keys.P:
-                _ = PrintAsync(all: false);
-                return true;
-            case Keys.Control | Keys.Shift | Keys.P:
-                _ = PrintAsync(all: true);
-                return true;
+            switch (keyData)
+            {
+                case Keys.F5:
+                    RequestRefresh();
+                    return true;
+                case Keys.Control | Keys.E:
+                    _ = _presenter.ExportAsync(all: false);
+                    return true;
+                case Keys.Control | Keys.P:
+                    _ = _presenter.PrintAsync(all: false);
+                    return true;
+                case Keys.Control | Keys.Shift | Keys.P:
+                    _ = _presenter.PrintAsync(all: true);
+                    return true;
+            }
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _loadingOverlay?.Dispose();
+            _loadingOverlay = null;
+        }
+
+        base.Dispose(disposing);
+    }
+
+    // ---- IReportsView ---------------------------------------------------------------------------------------
+
+    bool IView.IsAlive => IsAlive;
+
+    void IReportsView.ShowCategories(IReadOnlyList<FilterOption<int?>> options, int? selected, bool visible)
+    {
+        _suppressEvents = true;
+        try
+        {
+            _category.DataSource = options.ToList();
+            _category.SelectedIndex = Math.Max(0, options.ToList().FindIndex(o => o.Value == selected));
+            _category.Visible = visible;
+        }
+        finally
+        {
+            _suppressEvents = false;
+        }
+    }
+
+    void IReportsView.ShowStatus(string text, Tone tone)
+    {
+        _status.Tone = tone.ToLabelTone();
+        _status.Text = text;
+    }
+
+    void IReportsView.ShowPeriodEnabled(bool enabled) => _period.Enabled = enabled;
+
+    void IReportsView.ShowLoading(bool loading)
+    {
+        if (loading)
+        {
+            _loadingOverlay ??= LoadingOverlay.Begin(_tabs, "Đang tải báo cáo…");
+        }
+        else
+        {
+            _loadingOverlay?.Dispose();
+            _loadingOverlay = null;
+        }
+    }
+
+    void IReportsView.ShowRevenue(RevenueBoard board)
+    {
+        Apply(_netRevenue, board.NetRevenue, BadgeKind.Success);
+        Apply(_invoiceCount, board.Invoices, BadgeKind.Primary);
+        Apply(_grossProfit, board.Profit);
+        Apply(_refunds, board.Refunds);
+        _revenueChart.ShowValues = board.ShowBarValues;
+        _revenueChart.Points = Points(board.Bars);
+        _revenueChartCard.Title = board.ChartTitle;
+        _revenueChartCard.Subtitle = board.ChartSubtitle;
+        _revenueGrid.SetItems(board.Rows);
+    }
+
+    void IReportsView.ShowBestSellers(BestSellerBoard board)
+    {
+        _bestGrid.SetItems(board.Rows);
+        _bestCard.Subtitle = board.Subtitle;
+    }
+
+    void IReportsView.ShowProfit(ProfitBoard board)
+    {
+        _profitGrid.SetItems(board.Rows);
+        _profitChart.Points = Points(board.Bars);
+        _profitChartCard.Subtitle = board.Subtitle;
+    }
+
+    void IReportsView.ShowInventory(InventoryBoard board)
+    {
+        Apply(_costValue, board.CostValue, BadgeKind.Primary);
+        Apply(_retailValue, board.RetailValue);
+        Apply(_potentialProfit, board.PotentialProfit);
+        Apply(_stockAlerts, board.StockAlerts);
+        _inventoryGrid.SetItems(board.Rows);
+    }
+
+    Task<T> IReportsView.RunBusyAsync<T>(Func<Task<T>> work, string message) => RunBusyAsync(work, message);
+
+    Task<string?> IReportsView.SaveExcelAsync(string suggestedFileName, byte[] content) =>
+        ExcelFiles.SaveAsync(this, ReportsPresenter.Title, "Lưu báo cáo", suggestedFileName, content);
+
+    void IReportsView.ShowPrintPreview(ReportDocument document, Func<ReportOutput, string?, Task> onOutput)
+    {
+        using var preview = new ReportPrintPreviewForm(document, onOutput);
+        preview.ShowDialog(FindForm());
+    }
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) => Confirm(message, title, confirmText, danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
+
     // ---- Building blocks -------------------------------------------------------------------------------
+
+    private static List<ChartPoint> Points(IReadOnlyList<DashboardBar> bars) =>
+        bars.Select(b => new ChartPoint(b.Label, b.Value, b.Tooltip)).ToList();
+
+    private static void Apply(StatCard target, DashboardCard card, BadgeKind? accent = null)
+    {
+        target.Caption = card.Caption;
+        target.Value = card.Value;
+        target.Note = card.Note;
+        target.Accent = accent ?? card.Accent.ToBadgeKind();
+        if (card.ShowTrend)
+        {
+            target.SetTrend(card.TrendPercent, card.TrendComparedTo ?? "kỳ trước");
+        }
+        else
+        {
+            target.ClearTrend();
+        }
+    }
 
     private static ModernButton Action(string text, string glyph, ButtonVariant variant, Func<Task> onClick)
     {
@@ -311,24 +449,15 @@ internal sealed class ReportsScreen : UserControl
         SearchPlaceholder = "Tìm…",
     };
 
-    private static ModernComboBox Filter<T>(int width, IList<Option<T>> options) => new()
+    private static ModernComboBox Filter<T>(int width, IEnumerable<FilterOption<T>> options) => new()
     {
         Width = width,
         DropDownStyle = ComboBoxStyle.DropDownList,
         ReserveMessageSpace = false,
-        DisplayMember = nameof(Option<T>.Name),
-        ValueMember = nameof(Option<T>.Value),
-        DataSource = options,
+        DisplayMember = nameof(FilterOption<T>.Name),
+        ValueMember = nameof(FilterOption<T>.Value),
+        DataSource = options.ToList(),
         Margin = new Padding(8, 0, 0, 0),
-    };
-
-    /// <summary>"1,2 tr" / "850 N" – compact bar labels.</summary>
-    private static string ShortMoney(decimal amount) => Math.Abs(amount) switch
-    {
-        >= 1_000_000_000 => $"{(amount / 1_000_000_000).ToString("#,0.#", Vnd.Culture)} tỷ",
-        >= 1_000_000 => $"{(amount / 1_000_000).ToString("#,0.#", Vnd.Culture)} tr",
-        >= 1_000 => $"{(amount / 1_000).ToString("#,0", Vnd.Culture)} N",
-        _ => amount.ToString("#,0", Vnd.Culture),
     };
 
     private static void ToneMoneyCells(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -344,376 +473,4 @@ internal sealed class ReportsScreen : UserControl
             e.CellStyle!.ForeColor = ThemeManager.Current.Colors.Danger;
         }
     }
-
-    private ReportPeriod CurrentPeriod => new(_period.Range.From, _period.Range.To);
-
-    private void UpdatePeriodHint()
-    {
-        _period.Enabled = _tabs.SelectedIndex != InventoryTab;
-        if (_tabs.SelectedIndex == InventoryTab)
-        {
-            _status.Text = "Giá trị tồn kho tính tại thời điểm hiện tại, không theo kỳ.";
-        }
-    }
-
-    private void SetStatus(string text, LabelTone tone = LabelTone.Muted)
-    {
-        _status.Tone = tone;
-        _status.Text = text;
-    }
-
-    // ---- Loading ---------------------------------------------------------------------------------------
-
-    private async Task LoadCategoriesAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var categories = await scope.ServiceProvider.GetRequiredService<ICategoryService>().ListAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (categories.IsFailure)
-        {
-            // No products.view: rank across all categories only.
-            _category.Visible = false;
-            return;
-        }
-
-        _loadingFilters = true;
-        try
-        {
-            var options = new List<Option<int?>> { new(null, "Tất cả danh mục") };
-            options.AddRange(categories.Value.OrderBy(c => c.Name, StringComparer.CurrentCulture).Select(c => new Option<int?>(c.Id, c.Name)));
-            _category.DataSource = options;
-            _category.SelectedIndex = 0;
-        }
-        finally
-        {
-            _loadingFilters = false;
-        }
-    }
-
-    private async Task OnFiltersChangedAsync(bool includingInventory)
-    {
-        _filterVersion++;
-        for (var i = 0; i < _stale.Length; i++)
-        {
-            if (i != InventoryTab || includingInventory)
-            {
-                _stale[i] = true;
-            }
-        }
-
-        await ReloadTabAsync(_tabs.SelectedIndex);
-    }
-
-    private async Task ReloadAllAsync()
-    {
-        _period.RefreshToday();
-        await OnFiltersChangedAsync(includingInventory: true);
-    }
-
-    private async Task ReloadTabAsync(int tab)
-    {
-        if (_loading || tab < 0)
-        {
-            return;
-        }
-
-        var version = _filterVersion;
-        _loading = true;
-        var busy = LoadingOverlay.Begin(_tabs, "Đang tải báo cáo…");
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var reports = scope.ServiceProvider.GetRequiredService<IReportService>();
-            var error = tab switch
-            {
-                RevenueTab => await LoadRevenueAsync(reports),
-                BestSellerTab => await LoadBestSellersAsync(reports),
-                ProfitTab => await LoadProfitAsync(reports),
-                _ => await LoadInventoryAsync(reports),
-            };
-
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (error is not null)
-            {
-                SetStatus(error, LabelTone.Danger);
-                return;
-            }
-
-            // A filter changed while this query ran: keep the tab stale so it reloads below.
-            _stale[tab] = version != _filterVersion;
-            if (tab == InventoryTab)
-            {
-                UpdatePeriodHint();
-            }
-            else
-            {
-                SetStatus($"{_period.Describe()} · cập nhật lúc {DateTime.Now:HH:mm}");
-            }
-        }
-        finally
-        {
-            _loading = false;
-            busy.Dispose();
-        }
-
-        // The user may have switched tab or changed a filter while this one was loading.
-        if (!IsDisposed && _stale[_tabs.SelectedIndex] && (_tabs.SelectedIndex != tab || version != _filterVersion))
-        {
-            await ReloadTabAsync(_tabs.SelectedIndex);
-        }
-    }
-
-    private async Task<string?> LoadRevenueAsync(IReportService reports)
-    {
-        var period = CurrentPeriod;
-        var report = await reports.GetRevenueAsync(period);
-        if (report.IsFailure)
-        {
-            return report.Error.Message;
-        }
-
-        var previous = await reports.GetRevenueAsync(ReportFigures.PreviousPeriod(period));
-        if (IsDisposed)
-        {
-            return null;
-        }
-
-        var data = report.Value;
-        var totals = data.Totals;
-        var before = previous.IsSuccess ? previous.Value.Totals : null;
-
-        _netRevenue.Value = Vnd.Format(totals.NetRevenue);
-        _netRevenue.SetTrend(before is null ? null : ReportFigures.ChangePercent(totals.NetRevenue, before.NetRevenue), "kỳ trước");
-        _netRevenue.Note = before is null || before.NetRevenue <= 0 ? $"Doanh số {Vnd.Format(totals.SalesTotal)}" : null;
-
-        _invoiceCount.Value = totals.InvoiceCount.ToString("#,0", Vnd.Culture);
-        _invoiceCount.Note = totals.InvoiceCount == 0 ? "Chưa có hóa đơn" : $"TB {Vnd.Format(totals.AverageBasket)} / hóa đơn";
-
-        _grossProfit.Value = Vnd.Format(totals.GrossProfit);
-        _grossProfit.Accent = totals.GrossProfit < 0 ? BadgeKind.Danger : BadgeKind.Info;
-        _grossProfit.Note = $"Tỷ suất {totals.MarginPercent.ToString("0.0", Vnd.Culture)}% · giá vốn {Vnd.Format(totals.CostOfGoods)}";
-
-        _refunds.Value = Vnd.Format(totals.RefundTotal);
-        _refunds.Note = $"{totals.ReturnCount:#,0} phiếu trả · {totals.VoidedCount:#,0} HĐ hủy";
-
-        var buckets = ReportFigures.RevenueBuckets(data);
-        _revenueChart.ShowValues = buckets.Count <= 14;
-        _revenueChart.ValueFormatter = ShortMoney;
-        _revenueChart.Points = buckets
-            .Select(b => new ChartPoint(
-                b.Label,
-                b.NetRevenue,
-                (b.From == b.To ? DashboardFigures.LongDayLabel(b.From) : $"{b.From:dd/MM/yyyy} – {b.To:dd/MM/yyyy}")
-                + $"\nDoanh thu thuần: {Vnd.Format(b.NetRevenue)}\nLợi nhuận: {Vnd.Format(b.GrossProfit)}\nHóa đơn: {b.InvoiceCount:#,0}"))
-            .ToList();
-        var best = ReportFigures.BestDay(data);
-        _revenueChartCard.Title = data.Period.Days > ReportFigures.MaxDailyBars ? "Doanh thu thuần theo tháng" : "Doanh thu thuần theo ngày";
-        _revenueChartCard.Subtitle = best is null
-            ? "Không có doanh thu"
-            : $"Tổng {Vnd.Format(totals.NetRevenue)} · TB {Vnd.Format(Vnd.Round(totals.NetRevenue / data.Period.Days))}/ngày · cao nhất {best.Date:dd/MM} ({Vnd.Format(best.NetRevenue)})";
-
-        _revenueGrid.SetItems(data.Days
-            .OrderByDescending(d => d.Date)
-            .Select(d => new RevenueRow(
-                d.Date!.Value.ToDateTime(TimeOnly.MinValue),
-                d.InvoiceCount,
-                d.SalesTotal,
-                d.DiscountTotal,
-                d.RefundTotal,
-                d.NetRevenue,
-                d.VatAmount,
-                d.CostOfGoods,
-                d.GrossProfit,
-                d.MarginPercent,
-                d.CashCollected,
-                d.TransferCollected + d.CardCollected))
-            .ToList());
-        return null;
-    }
-
-    private async Task<string?> LoadBestSellersAsync(IReportService reports)
-    {
-        var rankBy = _rankBy.SelectedValue is ProductRanking r ? r : ProductRanking.Quantity;
-        var top = _top.SelectedValue is int t ? t : 20;
-        var categoryId = _category.Visible ? _category.SelectedValue as int? : null;
-        var report = await reports.GetBestSellersAsync(new BestSellerQuery(CurrentPeriod, rankBy, top, categoryId));
-        if (report.IsFailure)
-        {
-            return report.Error.Message;
-        }
-
-        if (IsDisposed)
-        {
-            return null;
-        }
-
-        var data = report.Value;
-        _bestGrid.SetItems(data.Rows.ToList());
-        var shownRevenue = data.Rows.Sum(x => x.Revenue);
-        _bestCard.Subtitle = data.Rows.Count == 0
-            ? null
-            : $"{data.Rows.Count}/{data.ProductCount} sản phẩm có bán · chiếm {ReportFiguresShare(shownRevenue, data.TotalRevenue)} doanh thu ({Vnd.Format(shownRevenue)})";
-        return null;
-    }
-
-    private static string ReportFiguresShare(decimal part, decimal whole) =>
-        whole == 0 ? "0%" : $"{Math.Round(part * 100 / whole, 1, MidpointRounding.AwayFromZero).ToString("0.#", Vnd.Culture)}%";
-
-    private async Task<string?> LoadProfitAsync(IReportService reports)
-    {
-        var report = await reports.GetProfitByCategoryAsync(CurrentPeriod);
-        if (report.IsFailure)
-        {
-            return report.Error.Message;
-        }
-
-        if (IsDisposed)
-        {
-            return null;
-        }
-
-        var data = report.Value;
-        var rows = data.Rows.OrderByDescending(x => x.Profit).ToList();
-        _profitGrid.SetItems(rows);
-        _profitChart.Points = rows
-            .Take(12)
-            .Select(x => new ChartPoint(
-                x.CategoryName,
-                x.Profit,
-                $"{x.CategoryName}\nDoanh thu: {Vnd.Format(x.Revenue)}\nLợi nhuận: {Vnd.Format(x.Profit)} ({x.MarginPercent.ToString("0.0", Vnd.Culture)}%)"))
-            .ToList();
-        _profitChartCard.Subtitle = rows.Count == 0
-            ? null
-            : $"Tổng {Vnd.Format(data.Totals.Profit)} · tỷ suất {data.Totals.MarginPercent.ToString("0.0", Vnd.Culture)}% trên {Vnd.Format(data.Totals.RevenueExclVat)} chưa VAT";
-        return null;
-    }
-
-    private async Task<string?> LoadInventoryAsync(IReportService reports)
-    {
-        var report = await reports.GetInventoryValueAsync();
-        if (report.IsFailure)
-        {
-            return report.Error.Message;
-        }
-
-        if (IsDisposed)
-        {
-            return null;
-        }
-
-        var data = report.Value;
-        var totals = data.Totals;
-        _costValue.Value = Vnd.Format(totals.CostValue);
-        _costValue.Note = $"{totals.ProductCount:#,0} sản phẩm";
-        _retailValue.Value = Vnd.Format(totals.RetailValue);
-        _retailValue.Note = $"Chưa VAT {Vnd.Format(totals.RetailValueExclVat)}";
-        _potentialProfit.Value = Vnd.Format(totals.PotentialProfit);
-        _potentialProfit.Note = "Nếu bán hết theo giá hiện tại";
-        _stockAlerts.Value = $"{totals.OutOfStockCount:#,0} / {totals.LowStockCount:#,0}";
-        _stockAlerts.Accent = totals.OutOfStockCount > 0 ? BadgeKind.Danger : BadgeKind.Warning;
-        _stockAlerts.Note = totals.NegativeStockCount > 0 ? $"{totals.NegativeStockCount:#,0} SP tồn âm – kiểm tra phiếu nhập" : "Không có tồn âm";
-        _inventoryGrid.SetItems(data.Rows.OrderByDescending(x => x.CostValue).ToList());
-        return null;
-    }
-
-    // ---- Export ----------------------------------------------------------------------------------------
-
-    private ReportExportRequest BuildRequest(bool all)
-    {
-        IReadOnlyList<ReportKind> kinds = all
-            ? [ReportKind.Revenue, ReportKind.BestSellers, ReportKind.ProfitByCategory, ReportKind.InventoryValue]
-            : [(ReportKind)_tabs.SelectedIndex];
-
-        var categoryId = _category.Visible ? _category.SelectedValue as int? : null;
-        return new ReportExportRequest(
-            kinds,
-            CurrentPeriod,
-            _rankBy.SelectedValue is ProductRanking r ? r : ProductRanking.Quantity,
-            _top.SelectedValue is int t ? t : 20,
-            categoryId,
-            categoryId is null ? null : _category.Text);
-    }
-
-    private async Task ExportAsync(bool all)
-    {
-        var request = BuildRequest(all);
-        using var scope = _scopeFactory.CreateScope();
-        var exporter = scope.ServiceProvider.GetRequiredService<IReportExportService>();
-        var result = await LoadingOverlay.RunAsync(this, () => exporter.ExportAsync(request), "Đang tạo file Excel…");
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Warning(this, result.Error.Message, Caption);
-            return;
-        }
-
-        var path = await ExcelFiles.SaveAsync(this, Caption, "Lưu báo cáo", result.Value.FileName, result.Value.Content);
-        if (path is not null && !IsDisposed)
-        {
-            SetStatus($"Đã xuất {Path.GetFileName(path)}", LabelTone.Success);
-        }
-    }
-
-    private async Task PrintAsync(bool all)
-    {
-        var request = BuildRequest(all);
-        ReportDocument document;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var exporter = scope.ServiceProvider.GetRequiredService<IReportExportService>();
-            var result = await LoadingOverlay.RunAsync(this, () => exporter.PrepareAsync(request), "Đang chuẩn bị bản in…");
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (result.IsFailure)
-            {
-                ModernDialog.Warning(this, result.Error.Message, Caption);
-                return;
-            }
-
-            document = result.Value;
-        }
-
-        using var preview = new ReportPrintPreviewForm(document, async (output, target) =>
-        {
-            // A fresh scope per audit entry keeps the DbContext short-lived while the preview stays open.
-            using var auditScope = _scopeFactory.CreateScope();
-            await auditScope.ServiceProvider.GetRequiredService<IReportExportService>().RecordPrintedAsync(document, output, target);
-            if (!IsDisposed)
-            {
-                SetStatus(output == ReportOutput.Pdf ? $"Đã lưu PDF {target}" : $"Đã in {document.Names}", LabelTone.Success);
-            }
-        });
-        preview.ShowDialog(FindForm());
-    }
-
-    private sealed record Option<T>(T Value, string Name);
-
-    private sealed record RevenueRow(
-        DateTime Date,
-        int InvoiceCount,
-        decimal SalesTotal,
-        decimal DiscountTotal,
-        decimal RefundTotal,
-        decimal NetRevenue,
-        decimal VatAmount,
-        decimal CostOfGoods,
-        decimal GrossProfit,
-        decimal MarginPercent,
-        decimal Cash,
-        decimal NonCash);
 }

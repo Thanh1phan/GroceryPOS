@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-11-26 (2)
+- **Báo cáo** moved to MVP: `Presentation.Reports.ReportsPresenter` (period, tabs that load when shown, best-seller filters, Xuất Excel / Xuất tất cả, In / PDF with audited output). KPI cards, charts and tables come from the tested `RevenueBoard`, `BestSellerBoard`, `ProfitBoard` and `InventoryBoard`; `ReportsScreen` is now a passive `BaseUserControl` view resolved through DI.
+- A failed load no longer leaves another period's figures under the newly chosen period: the tab is cleared and the error shown in red. A failed F5 of the same period keeps the figures and turns the status amber ("Không cập nhật được (…) · đang hiển thị số liệu lúc 10:00"); a failed tab is retried when you open it again.
+- Fixes: after visiting Giá trị tồn kho, the other tabs kept its "không theo kỳ" note instead of their own "cập nhật lúc" line (each tab now keeps its own status); a filter changed while a failing load ran was never loaded; F5 now also re-lists the categories (a category deleted meanwhile falls back to "Tất cả danh mục"); a successful export or print is confirmed with a toast instead of a status text the next load overwrote; two exports/prints can no longer run at once.
+- The profit chart says when categories are left out ("biểu đồ 12/15 danh mục"). 31 new tests (Domain 149, Application 490, Infrastructure 63, UI.Controls 444, Presentation 374 – all passing).
+
 ## 2026-11-26
 - Fix (Bán hàng): on a narrow cart the toolbar buttons ran off the left edge – "Kiểm giá (F12)" was cut in half and "Màn hình khách" was not reachable. Grid toolbar buttons (`ModernDataGrid.ToolbarItems`) now wrap onto another row and the toolbar grows to fit them (tested `ToolbarFit`), so every button stays visible on every list screen.
 - The POS status line ("Sẵn sàng bán hàng.") got more height so it no longer touches the scan box or the cart.
