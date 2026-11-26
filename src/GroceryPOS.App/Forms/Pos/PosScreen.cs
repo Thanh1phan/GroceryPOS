@@ -115,7 +115,9 @@ internal sealed class PosScreen : UserControl
         _status = new ToneLabel
         {
             Dock = DockStyle.Top,
-            Height = 30,
+            Height = 38,
+            Padding = new Padding(0, 4, 0, 4),
+            AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft,
             Font = ThemeFonts.Get(FontRole.Subtitle),
             Tone = LabelTone.Muted,

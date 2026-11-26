@@ -30,6 +30,7 @@ public class ModernDataGrid : UserControl, IThemeable
     private readonly Panel _toolbar;
     private readonly ModernTextBox _search;
     private readonly FlowLayoutPanel _toolbarItems;
+    private bool _fittingToolbar;
     private readonly Panel _footer;
     private readonly Label _summary;
     private readonly FlowLayoutPanel _pager;
@@ -92,11 +93,13 @@ public class ModernDataGrid : UserControl, IThemeable
         _search.EnterPressed += (_, _) => ApplySearchNow();
         _search.KeyDown += OnSearchKeyDown;
 
-        _toolbarItems = new FlowLayoutPanel
+        // Buttons wrap onto another row when the grid is too narrow for all of them (e.g. the POS cart on a
+        // 1366 px screen); the toolbar then grows so the extra row is visible instead of buttons being cut off.
+        _toolbarItems = new ToolbarFlowPanel
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false,
+            WrapContents = true,
             BackColor = Color.Transparent,
             Padding = Padding.Empty,
             Margin = Padding.Empty,
@@ -108,6 +111,7 @@ public class ModernDataGrid : UserControl, IThemeable
             UpdateToolbarVisibility();
         };
         _toolbarItems.ControlRemoved += (_, _) => UpdateToolbarVisibility();
+        ((ToolbarFlowPanel)_toolbarItems).LayoutDone += (_, _) => FitToolbarHeight();
 
         _toolbar = new Panel { Dock = DockStyle.Top, Padding = new Padding(12, 12, 12, 8), BackColor = Color.Transparent };
         _toolbar.Controls.Add(_toolbarItems);
@@ -939,6 +943,7 @@ public class ModernDataGrid : UserControl, IThemeable
     private void ApplyMetrics()
     {
         _toolbar.Height = this.ScaleDpi(ThemeManager.Current.Spacing.ControlHeight + 20);
+        FitToolbarHeight();
         _footer.Height = this.ScaleDpi(44);
         _search.Width = this.ScaleDpi(320);
         UpdateToolbarVisibility();
@@ -946,6 +951,46 @@ public class ModernDataGrid : UserControl, IThemeable
 
     private void UpdateToolbarVisibility() =>
         _toolbar.Visible = _showSearch || _toolbarItems.Controls.Count > 0;
+
+    /// <summary>Grows the toolbar to the rows the buttons wrapped onto (and back to one row when they fit again).</summary>
+    private void FitToolbarHeight()
+    {
+        if (_fittingToolbar || IsDisposed)
+        {
+            return;
+        }
+
+        var bottoms = _toolbarItems.Controls.Cast<Control>()
+            .Where(c => c.Visible)
+            .Select(c => c.Bottom + c.Margin.Bottom + _toolbarItems.Padding.Bottom);
+        var height = ToolbarFit.Height(this.ScaleDpi(ThemeManager.Current.Spacing.ControlHeight + 20), bottoms, _toolbar.Padding.Vertical);
+        if (height == _toolbar.Height)
+        {
+            return;
+        }
+
+        _fittingToolbar = true;
+        try
+        {
+            _toolbar.Height = height;
+        }
+        finally
+        {
+            _fittingToolbar = false;
+        }
+    }
+
+    /// <summary>Flow panel that reports when its children have been positioned (the Layout event fires before that).</summary>
+    private sealed class ToolbarFlowPanel : FlowLayoutPanel
+    {
+        public event EventHandler? LayoutDone;
+
+        protected override void OnLayout(LayoutEventArgs levent)
+        {
+            base.OnLayout(levent);
+            LayoutDone?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     private void OnThemeChanged(object? sender, ThemeChangedEventArgs e)
     {

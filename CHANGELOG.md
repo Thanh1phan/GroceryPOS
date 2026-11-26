@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26
+- Fix (Bán hàng): on a narrow cart the toolbar buttons ran off the left edge – "Kiểm giá (F12)" was cut in half and "Màn hình khách" was not reachable. Grid toolbar buttons (`ModernDataGrid.ToolbarItems`) now wrap onto another row and the toolbar grows to fit them (tested `ToolbarFit`), so every button stays visible on every list screen.
+- The POS status line ("Sẵn sàng bán hàng.") got more height so it no longer touches the scan box or the cart.
+- 4 new tests (UI.Controls 444 – all suites passing).
+
 ## 2026-11-25
 - **Tổng quan** moved to MVP: `Presentation.Dashboard.DashboardPresenter` (today's figures and the user's drawer loaded in one scope with "latest wins", one-minute auto-refresh, F5, quick actions and F2 / low-stock row opening other screens only with permission). Cards, charts, lists and subtitles come from the tested `DashboardBoard` and `DashboardShiftCard`; `DashboardScreen` is now a passive `BaseUserControl` view resolved through DI.
 - A failed refresh no longer replaces the subtitle with a bare error over stale numbers: the last good figures stay and the subtitle turns amber ("Không cập nhật được lúc 10:03 · đang hiển thị số liệu lúc 10:00"); F5 also shows an error toast, the minute timer does not (no toast every minute while the database is unreachable).
