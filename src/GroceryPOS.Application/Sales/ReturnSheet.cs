@@ -214,6 +214,42 @@ public sealed class ReturnSheet
         OnChanged();
     }
 
+    /// <summary>
+    /// Carries the cashier's work over from <paramref name="previous"/> (an older copy of the same invoice, e.g. before a
+    /// reload): picked quantities clamped to what is still returnable now, restock flags, reason and refund method.
+    /// Returns how many picked lines had to be reduced because another return took the units meanwhile.
+    /// </summary>
+    public int CopySelectionFrom(ReturnSheet previous)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        if (previous.Sale.SaleId != Sale.SaleId)
+        {
+            throw new ArgumentException("Phiếu trả cũ thuộc hóa đơn khác.", nameof(previous));
+        }
+
+        var reduced = 0;
+        foreach (var old in previous._lines.Where(l => l.IsSelected))
+        {
+            if (_lines.FirstOrDefault(l => l.SaleLineId == old.SaleLineId) is not { } line)
+            {
+                reduced++;
+                continue;
+            }
+
+            line.Quantity = Math.Clamp(old.Quantity, 0, Math.Max(0, line.Line.RemainingQuantity));
+            line.Restock = old.Restock;
+            if (line.Quantity < old.Quantity)
+            {
+                reduced++;
+            }
+        }
+
+        Reason = previous.Reason;
+        RefundMethod = previous.RefundMethod;
+        OnChanged();
+        return reduced;
+    }
+
     public void SetReason(string? reason)
     {
         Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();

@@ -6,6 +6,7 @@ using GroceryPOS.Presentation.Inventory;
 using GroceryPOS.Presentation.Partners;
 using GroceryPOS.Presentation.Purchasing;
 using GroceryPOS.Presentation.Reports;
+using GroceryPOS.Presentation.Sales;
 using GroceryPOS.Presentation.Settings;
 using GroceryPOS.Presentation.Shifts;
 using GroceryPOS.Presentation.Users;
@@ -45,6 +46,7 @@ public static class DependencyInjection
         services.AddTransient<AuditLogPresenter>();
         services.AddTransient<DashboardPresenter>();
         services.AddTransient<ReportsPresenter>();
+        services.AddTransient<ReturnPresenter>();
         return services;
     }
 }

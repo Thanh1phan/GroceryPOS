@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-27
+- **Trả hàng** moved to MVP: `Presentation.Sales.ReturnPresenter` (scan an invoice with "newest scan wins", pick lines F4/Space/+/−/F6/F7, reason and refund method, F9 Hoàn tiền with a red confirmation, refund slip preview, Esc Làm lại). Badge, header, refund card and the message under it come from the tested `ReturnScreenState`; `ReturnScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
+- **Cash refund after opening a shift elsewhere**: the screen read the shift only once, so a cashier who opened the shift on the POS screen afterwards still got "Bạn chưa mở ca…" until reopening Trả hàng. The shift is now re-checked before every cash refund (and on F5).
+- **A failed refund no longer leaves stale quantities**: the invoice is reloaded keeping the picks, reason and method (new `ReturnSheet.CopySelectionFrom`); lines another counter returned meanwhile are lowered to what is left, with an amber "đã giảm số lượng trả ở N dòng" note. Re-scanning the invoice on screen also keeps the picks instead of silently clearing them.
+- Leaving the screen (menu, sign-out, closing) with picked lines now asks "Phiếu trả cho hóa đơn … chưa hoàn tiền. Bỏ phiếu này?"; a failed load of earlier returns is shown in red instead of "Chưa có phiếu trả nào"; keys no longer pick lines on an invoice past the return window; the success line also mentions restored points; the Hàng hỏng button is sized for its longer "Nhập lại kho (F6)" caption.
+- 35 new tests (Domain 149, Application 493, Infrastructure 63, UI.Controls 444, Presentation 406 – all passing).
+
 ## 2026-11-26 (2)
 - **Báo cáo** moved to MVP: `Presentation.Reports.ReportsPresenter` (period, tabs that load when shown, best-seller filters, Xuất Excel / Xuất tất cả, In / PDF with audited output). KPI cards, charts and tables come from the tested `RevenueBoard`, `BestSellerBoard`, `ProfitBoard` and `InventoryBoard`; `ReportsScreen` is now a passive `BaseUserControl` view resolved through DI.
 - A failed load no longer leaves another period's figures under the newly chosen period: the tab is cleared and the error shown in red. A failed F5 of the same period keeps the figures and turns the status amber ("Không cập nhật được (…) · đang hiển thị số liệu lúc 10:00"); a failed tab is retried when you open it again.

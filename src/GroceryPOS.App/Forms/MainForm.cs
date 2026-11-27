@@ -196,7 +196,7 @@ public sealed class MainForm : Form
         {
             "dashboard" => new DashboardScreen(_services, Navigate),
             "pos" => new PosScreen(_scopeFactory, _currentUser),
-            "returns" => new ReturnScreen(_scopeFactory, _currentUser),
+            "returns" => new ReturnScreen(_services),
             "categories" => new CategoryListScreen(_services),
             "products" => new ProductListScreen(_services),
             "inventory" => new InventoryScreen(_services),

@@ -1,15 +1,11 @@
-using GroceryPOS.UI.Controls.Feedback;
-using System.Globalization;
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Common;
-using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Sales.Receipts;
-using GroceryPOS.Application.Shifts;
 using GroceryPOS.Domain.Sales;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Sales;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
-using GroceryPOS.UI.Controls.Display.Core;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -21,18 +17,16 @@ namespace GroceryPOS.App.Forms.Pos;
 /// <summary>
 /// Trả hàng: scan or type the invoice number from the customer's receipt, pick what comes back per line
 /// (quantity, back on the shelf or written off as damaged), give a reason and refund in cash or by transfer,
-/// then print the refund slip (PHIẾU TRẢ HÀNG). All state lives in the UI-free <see cref="ReturnSheet"/>.
-/// Keys: F2 số hóa đơn · F4 số lượng · F6 hàng hỏng/nhập kho · F7 trả cả hóa đơn · +/− số lượng · Space trả hết dòng ·
-/// F9 hoàn tiền · Esc làm lại.
+/// then print the refund slip (PHIẾU TRẢ HÀNG).
+/// Keys: F2 số hóa đơn · F4 số lượng · F5 tải lại · F6 hàng hỏng/nhập kho · F7 trả cả hóa đơn · +/− số lượng ·
+/// Space trả hết dòng · F9 hoàn tiền · Esc làm lại.
+/// Passive MVP view – the logic lives in <see cref="ReturnPresenter"/>, the sheet in <see cref="ReturnSheet"/>.
 /// </summary>
-internal sealed class ReturnScreen : UserControl
+internal sealed class ReturnScreen : BaseUserControl, IReturnView
 {
     private const int SidePanelWidth = 380;
 
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ICurrentUser _currentUser;
-    private readonly SalesOptions _options;
-    private readonly StoreProfile _store;
+    private readonly ReturnPresenter _presenter;
 
     private readonly ModernTextBox _scan;
     private readonly ModernBadge _windowBadge;
@@ -42,6 +36,7 @@ internal sealed class ReturnScreen : UserControl
     private readonly ModernButton[] _lineButtons;
     private readonly ModernButton _restock;
     private readonly ModernButton _returnAll;
+    private readonly ModernButton _clear;
 
     private readonly ToneLabel _lineCount;
     private readonly ToneLabel _refund;
@@ -54,22 +49,11 @@ internal sealed class ReturnScreen : UserControl
     private readonly ToneLabel _blocker;
     private readonly ModernButton _submit;
 
-    private ReturnSheet? _sheet;
     private bool _rendering;
-    private bool _busy;
-    private bool? _hasOpenShift;
 
-    public ReturnScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public ReturnScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _currentUser = currentUser;
-        Dock = DockStyle.Fill;
-
-        using (var scope = scopeFactory.CreateScope())
-        {
-            _options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
-            _store = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
-        }
+        _presenter = services.GetRequiredService<ReturnPresenter>();
 
         // ---- Left: invoice scan, header, lines -----------------------------------------------------
         _scan = new ModernTextBox
@@ -80,11 +64,11 @@ internal sealed class ReturnScreen : UserControl
             PlaceholderText = "Quét mã vạch hoặc nhập số hóa đơn trên phiếu của khách (F2), VD: HD261027-0001",
             ReserveMessageSpace = false,
         };
-        _scan.EnterPressed += async (_, _) => await LoadInvoiceAsync();
-        _scan.TrailingIconClick += async (_, _) => await LoadInvoiceAsync();
+        _scan.EnterPressed += async (_, _) => await _presenter.LoadInvoiceAsync(_scan.Text);
+        _scan.TrailingIconClick += async (_, _) => await _presenter.LoadInvoiceAsync(_scan.Text);
 
         _windowBadge = new ModernBadge { Visible = false, Margin = new Padding(0, 8, 8, 0) };
-        _invoiceInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 8, 0, 0), Text = "Chưa chọn hóa đơn." };
+        _invoiceInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 8, 0, 0) };
         var header = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 40, WrapContents = false };
         header.Controls.AddRange([_windowBadge, _invoiceInfo]);
 
@@ -93,9 +77,9 @@ internal sealed class ReturnScreen : UserControl
             Dock = DockStyle.Top,
             Height = 30,
             TextAlign = ContentAlignment.MiddleLeft,
+            AutoEllipsis = true,
             Font = ThemeFonts.Get(FontRole.Subtitle),
             Tone = LabelTone.Muted,
-            Text = $"Khách được đổi trả trong {_options.ReturnWindowDays} ngày kể từ ngày mua.",
         };
 
         _grid = new ModernDataGrid
@@ -121,19 +105,20 @@ internal sealed class ReturnScreen : UserControl
         }
 
         _grid.InnerGrid.CellFormatting += OnCellFormatting;
-        _grid.RowActivated += (_, _) => EditQuantity();
+        _grid.RowActivated += (_, _) => _presenter.EditQuantity(SelectedLine);
         _grid.SelectionChanged += (_, _) => UpdateLineButtons();
 
-        var plus = ToolbarButton("+1", null, (_, _) => Step(1));
-        var minus = ToolbarButton("−1", null, (_, _) => Step(-1));
-        var all = ToolbarButton("Trả hết dòng (Space)", Glyphs.Accept, (_, _) => ToggleLine());
-        var quantity = ToolbarButton("Số lượng (F4)", Glyphs.Edit, (_, _) => EditQuantity());
-        _restock = ToolbarButton("Hàng hỏng (F6)", Glyphs.Warning, (_, _) => ToggleRestock());
+        var plus = ToolbarButton("+1", null, (_, _) => _presenter.Step(SelectedLine, 1));
+        var minus = ToolbarButton("−1", null, (_, _) => _presenter.Step(SelectedLine, -1));
+        var all = ToolbarButton("Trả hết dòng (Space)", Glyphs.Accept, (_, _) => _presenter.ToggleLine(SelectedLine));
+        var quantity = ToolbarButton("Số lượng (F4)", Glyphs.Edit, (_, _) => _presenter.EditQuantity(SelectedLine));
+        _restock = ToolbarButton("Nhập lại kho (F6)", Glyphs.Warning, (_, _) => _presenter.ToggleRestock(SelectedLine));
+        _restock.Text = "Hàng hỏng (F6)"; // sized for the longer caption, which it shows on a damaged line
         _lineButtons = [plus, minus, all, quantity, _restock];
-        _returnAll = ToolbarButton("Trả cả hóa đơn (F7)", Glyphs.Return, (_, _) => Sheet(s => s.ReturnAll()));
-        var clear = ToolbarButton("Bỏ chọn", Glyphs.Clear, (_, _) => Sheet(s => s.Clear()));
-        clear.Variant = ButtonVariant.Ghost;
-        _grid.ToolbarItems.Controls.AddRange([.. _lineButtons, _returnAll, clear]);
+        _returnAll = ToolbarButton("Trả cả hóa đơn (F7)", Glyphs.Return, (_, _) => _presenter.ReturnAll());
+        _clear = ToolbarButton("Bỏ chọn", Glyphs.Clear, (_, _) => _presenter.ClearPicks());
+        _clear.Variant = ButtonVariant.Ghost;
+        _grid.ToolbarItems.Controls.AddRange([.. _lineButtons, _returnAll, _clear]);
 
         var left = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16, 16, 8, 16) };
         left.Controls.Add(_grid);
@@ -168,7 +153,7 @@ internal sealed class ReturnScreen : UserControl
             {
                 if (!_rendering && radio.Checked)
                 {
-                    Sheet(s => s.SetRefundMethod(_cash.Checked ? PaymentMethod.Cash : PaymentMethod.BankTransfer));
+                    _presenter.SetRefundMethod(_cash.Checked ? PaymentMethod.Cash : PaymentMethod.BankTransfer);
                 }
             };
         }
@@ -181,7 +166,7 @@ internal sealed class ReturnScreen : UserControl
         {
             if (!_rendering)
             {
-                Sheet(s => s.SetReason(_reason.Text));
+                _presenter.SetReason(_reason.Text);
             }
         };
 
@@ -210,10 +195,10 @@ internal sealed class ReturnScreen : UserControl
             Height = 56,
             Font = ThemeFonts.Get(FontRole.Title, FontStyle.Bold),
         };
-        _submit.Click += async (_, _) => await SubmitAsync();
+        _submit.Click += async (_, _) => await _presenter.SubmitAsync();
 
         var reset = new ModernButton { Text = "Làm lại (Esc)", Variant = ButtonVariant.Secondary, Dock = DockStyle.Fill };
-        reset.Click += (_, _) => Reset(confirm: true);
+        reset.Click += (_, _) => _presenter.Reset();
 
         AddSpan(side, Section("Phiếu trả hàng"));
         AddPair(side, Caption("Sản phẩm trả"), _lineCount);
@@ -241,12 +226,21 @@ internal sealed class ReturnScreen : UserControl
         Controls.Add(left);
         Controls.Add(sideHost);
 
-        Load += async (_, _) =>
-        {
-            Render();
-            _scan.Focus();
-            await LoadShiftAsync();
-        };
+        _presenter.Attach(this);
+    }
+
+    bool IView.IsAlive => IsAlive;
+
+    private ReturnSheetLine? SelectedLine => _grid.GetSelected<ReturnSheetLine>();
+
+    public override Task RefreshDataAsync() => _presenter.RefreshAsync();
+
+    public override bool CanLeave() => _presenter.CanLeave();
+
+    protected override async Task OnFirstLoadAsync()
+    {
+        _scan.Focus();
+        await _presenter.StartAsync();
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -256,241 +250,46 @@ internal sealed class ReturnScreen : UserControl
         switch (keyData)
         {
             case Keys.F2:
-                _scan.Focus();
-                _scan.SelectAll();
+                ((IReturnView)this).FocusScan();
                 return true;
             case Keys.F4:
-                EditQuantity();
+                _presenter.EditQuantity(SelectedLine);
                 return true;
             case Keys.F6:
-                ToggleRestock();
+                _presenter.ToggleRestock(SelectedLine);
                 return true;
             case Keys.F7:
-                Sheet(s => s.ReturnAll());
+                _presenter.ReturnAll();
                 return true;
             case Keys.F9:
-                _ = SubmitAsync();
+                _ = _presenter.SubmitAsync();
                 return true;
             case Keys.Escape:
-                Reset(confirm: true);
+                _presenter.Reset();
                 return true;
             case Keys.Space when !typing:
-                ToggleLine();
+                _presenter.ToggleLine(SelectedLine);
                 return true;
             case Keys.Add or Keys.Oemplus when !typing:
-                Step(1);
+                _presenter.Step(SelectedLine, 1);
                 return true;
             case Keys.Subtract or Keys.OemMinus when !typing:
-                Step(-1);
+                _presenter.Step(SelectedLine, -1);
                 return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
     }
 
-    // ---- Loading -----------------------------------------------------------------------------------
-
-    /// <summary>Whether the cashier has an open shift (null = unknown, e.g. no shift permission); cash refunds need one.</summary>
-    private async Task LoadShiftAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        _hasOpenShift = result.IsSuccess ? result.Value.Current is not null : null;
-        Render();
-    }
-
-    private async Task LoadInvoiceAsync(string? code = null)
-    {
-        code ??= _scan.Text.Trim();
-        if (code.Length == 0 || _busy)
-        {
-            return;
-        }
-
-        if (_sheet is { SelectedLineCount: > 0 } && !code.Equals(_sheet.Sale.Code, StringComparison.OrdinalIgnoreCase)
-            && !Confirm($"Bỏ phiếu trả đang làm cho hóa đơn {_sheet.Sale.Code}?"))
-        {
-            return;
-        }
-
-        _busy = true;
-        try
-        {
-            Result<ReturnableSaleDto> result;
-            Result<IReadOnlyList<SaleReturnSummaryDto>>? history = null;
-            using (var scope = _scopeFactory.CreateScope())
-            {
-                var service = scope.ServiceProvider.GetRequiredService<IReturnService>();
-                result = await service.GetReturnableAsync(code);
-                if (result.IsSuccess)
-                {
-                    history = await service.ListBySaleAsync(result.Value.SaleId);
-                }
-            }
-
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (result.IsFailure)
-            {
-                System.Media.SystemSounds.Beep.Play();
-                ShowStatus(result.Error.Message, LabelTone.Danger);
-                _scan.SelectAll();
-                return;
-            }
-
-            SetSheet(new ReturnSheet(result.Value));
-            _scan.Text = result.Value.Code;
-            RenderHistory(history is { IsSuccess: true } ? history.Value : []);
-            ShowStatus(DescribeInvoiceState(result.Value), result.Value.CanReturn ? LabelTone.Muted : LabelTone.Warning);
-            _grid.InnerGrid.Focus();
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private void SetSheet(ReturnSheet? sheet)
-    {
-        _sheet = sheet;
-        if (sheet is not null)
-        {
-            sheet.Changed += (_, _) => Render();
-        }
-
-        _rendering = true;
-        try
-        {
-            _reason.Text = string.Empty;
-            _cash.Checked = true;
-        }
-        finally
-        {
-            _rendering = false;
-        }
-
-        _grid.SetItems(sheet?.Lines ?? (IReadOnlyList<ReturnSheetLine>)[]);
-        if (sheet is null)
-        {
-            RenderHistory([]);
-        }
-
-        Render();
-    }
-
-    private string DescribeInvoiceState(ReturnableSaleDto sale)
-    {
-        if (sale.IsFullyReturned)
-        {
-            return "Hóa đơn này đã được trả hết hàng.";
-        }
-
-        if (!sale.IsWithinReturnWindow)
-        {
-            return sale.CanReturn
-                ? $"Hóa đơn đã quá {_options.ReturnWindowDays} ngày – bạn đang trả hàng với quyền quản lý."
-                : $"Hóa đơn đã quá {_options.ReturnWindowDays} ngày đổi trả. Vui lòng nhờ quản lý thực hiện.";
-        }
-
-        return "Chọn sản phẩm khách trả: Enter/F4 nhập số lượng, Space trả hết dòng, F6 đánh dấu hàng hỏng.";
-    }
-
-    private void RenderHistory(IReadOnlyList<SaleReturnSummaryDto> returns)
-    {
-        _previousReturns.Text = returns.Count == 0
-            ? "Chưa có phiếu trả nào cho hóa đơn này."
-            : string.Join(
-                Environment.NewLine,
-                returns.Select(r =>
-                    $"{r.Code} · {StoreTime(r.ReturnedAt):dd/MM HH:mm} · {Vnd.Format(r.RefundTotal)} ({SaleLabels.Of(r.RefundMethod)}) – {r.Reason}"));
-    }
-
-    // ---- Line actions ------------------------------------------------------------------------------
-
-    private ReturnSheetLine? SelectedLine => _grid.GetSelected<ReturnSheetLine>();
-
-    private void Step(int delta)
-    {
-        if (SelectedLine is { IsExhausted: false } line)
-        {
-            Sheet(s => s.Step(line.SaleLineId, delta));
-        }
-    }
-
-    private void ToggleLine()
-    {
-        if (SelectedLine is { IsExhausted: false } line)
-        {
-            Sheet(s => s.ToggleLine(line.SaleLineId));
-        }
-    }
-
-    private void ToggleRestock()
-    {
-        if (SelectedLine is { IsExhausted: false } line)
-        {
-            Sheet(s =>
-            {
-                // Marking a line as damaged implies it is being returned.
-                if (!line.IsSelected)
-                {
-                    s.ToggleLine(line.SaleLineId);
-                }
-
-                s.SetRestock(line.SaleLineId, !line.Restock);
-            });
-        }
-    }
-
-    private void EditQuantity()
-    {
-        if (SelectedLine is not { IsExhausted: false } line)
-        {
-            return;
-        }
-
-        var start = line.IsSelected ? line.Quantity : line.Line.RemainingQuantity;
-        using var dialog = new PosQuantityDialog(
-            $"{line.Line.ProductName} – còn trả được {line.Line.RemainingQuantity.ToString("#,0.###", Vnd.Culture)} {line.Line.Unit}",
-            line.Line.Unit,
-            start);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            if (dialog.Quantity > line.Line.RemainingQuantity)
-            {
-                ShowStatus($"Chỉ còn trả được tối đa {line.Line.RemainingQuantity.ToString("#,0.###", Vnd.Culture)} {line.Line.Unit}.", LabelTone.Warning);
-            }
-
-            Sheet(s => s.SetQuantity(line.SaleLineId, dialog.Quantity));
-        }
-    }
-
-    private void Sheet(Action<ReturnSheet> action)
-    {
-        if (_sheet is { } sheet && !_busy)
-        {
-            action(sheet);
-        }
-    }
-
     private void UpdateLineButtons()
     {
-        var line = SelectedLine;
-        var editable = _sheet is { CanReturnAnything: true } && line is { IsExhausted: false };
+        var actions = _presenter.ActionsFor(SelectedLine);
         foreach (var button in _lineButtons)
         {
-            button.Enabled = editable;
+            button.Enabled = actions.CanEdit;
         }
 
-        _restock.Text = line is { IsSelected: true, Restock: false } ? "Nhập lại kho (F6)" : "Hàng hỏng (F6)";
+        _restock.Text = actions.RestockCaption;
     }
 
     private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -519,177 +318,51 @@ internal sealed class ReturnScreen : UserControl
         }
     }
 
-    // ---- Submit ------------------------------------------------------------------------------------
+    // ---- IReturnView -------------------------------------------------------------------------------
 
-    private string? ScreenBlocker =>
-        _sheet is { RefundMethod: PaymentMethod.Cash } && _options.RequireOpenShift && _hasOpenShift == false
-            ? "Bạn chưa mở ca nên không thể hoàn tiền mặt. Mở ca ở màn hình Ca làm việc hoặc hoàn bằng chuyển khoản."
-            : null;
-
-    private async Task SubmitAsync()
-    {
-        if (_sheet is not { } sheet || _busy)
-        {
-            return;
-        }
-
-        var request = sheet.BuildRequest();
-        if (request.IsFailure || ScreenBlocker is not null)
-        {
-            System.Media.SystemSounds.Beep.Play();
-            return;
-        }
-
-        if (!Confirm($"{sheet.Summary} – hóa đơn {sheet.Sale.Code}?"))
-        {
-            return;
-        }
-
-        _busy = true;
-        _submit.Enabled = false;
-        Result<ReturnReceipt> result;
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            result = await scope.ServiceProvider.GetRequiredService<IReturnService>().CreateAsync(request.Value);
-        }
-        finally
-        {
-            _busy = false;
-        }
-
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ShowStatus(result.Error.Message, LabelTone.Danger);
-            Render();
-            return;
-        }
-
-        var slip = result.Value;
-        SetSheet(null);
-        _scan.Clear();
-        ShowStatus(Describe(slip), LabelTone.Success);
-        ShowSlip(slip);
-        _scan.Focus();
-    }
-
-    private void ShowSlip(ReturnReceipt slip)
-    {
-        var cashier = _currentUser.Session?.FullName;
-        using var preview = new ReceiptPreviewForm(
-            columns => ReturnSlipFormatter.Format(slip, _store, cashier, columns, _options.StoreUtcOffset),
-            $"Phiếu trả hàng {slip.Code}",
-            $"Phiếu trả hàng {slip.Code}",
-            _store.ReceiptPaperWidthMm);
-        preview.ShowDialog(this);
-    }
-
-    private static string Describe(ReturnReceipt slip)
-    {
-        var text = $"✔ {slip.Code}: hoàn {Vnd.Format(slip.RefundTotal)} ({SaleLabels.Of(slip.RefundMethod)}) cho HĐ {slip.SaleCode}";
-        if (slip.PointsReversed > 0)
-        {
-            text += $" · trừ {slip.PointsReversed.ToString("#,0", Vnd.Culture)} điểm";
-        }
-
-        if (slip.WrittenOffCost > 0)
-        {
-            text += $" · hủy hàng giá vốn {Vnd.Format(slip.WrittenOffCost)}";
-        }
-
-        return text;
-    }
-
-    private void Reset(bool confirm)
-    {
-        if (_sheet is null)
-        {
-            _scan.Clear();
-            _scan.Focus();
-            return;
-        }
-
-        if (confirm && _sheet.SelectedLineCount > 0 && !Confirm("Bỏ phiếu trả hàng đang làm?"))
-        {
-            return;
-        }
-
-        SetSheet(null);
-        _scan.Clear();
-        ShowStatus($"Khách được đổi trả trong {_options.ReturnWindowDays} ngày kể từ ngày mua.", LabelTone.Muted);
-        _scan.Focus();
-    }
-
-    // ---- Rendering ---------------------------------------------------------------------------------
-
-    private void Render()
+    void IReturnView.ShowSheet(ReturnSheet? sheet)
     {
         _rendering = true;
         try
         {
-            var sheet = _sheet;
-            if (sheet is null)
+            _reason.Text = sheet?.Reason ?? string.Empty;
+            _cash.Checked = sheet is null || sheet.RefundMethod == PaymentMethod.Cash;
+            _transfer.Checked = !_cash.Checked;
+        }
+        finally
+        {
+            _rendering = false;
+        }
+
+        _grid.SetItems(sheet?.Lines ?? (IReadOnlyList<ReturnSheetLine>)[]);
+    }
+
+    void IReturnView.ShowState(ReturnScreenState state)
+    {
+        _rendering = true;
+        try
+        {
+            _windowBadge.Visible = state.BadgeText is not null;
+            if (state.BadgeText is not null)
             {
-                _windowBadge.Visible = false;
-                _invoiceInfo.Text = "Chưa chọn hóa đơn.";
-                _lineCount.Text = "0";
-                _writtenOff.Text = "0 ₫";
-                _refund.Text = "0 ₫";
-                _points.Text = string.Empty;
-                _blocker.Text = "Quét hoặc nhập số hóa đơn của khách.";
-                _submit.Enabled = false;
-                _returnAll.Enabled = false;
-                UpdateLineButtons();
-                return;
+                _windowBadge.Set(state.BadgeText, state.BadgeTone.ToBadgeKind());
             }
 
-            var sale = sheet.Sale;
-            _windowBadge.Visible = true;
-            if (sale.IsFullyReturned)
+            _invoiceInfo.Text = state.InvoiceInfo;
+            _lineCount.Text = state.LineCount;
+            _writtenOff.Text = state.WrittenOff;
+            _refund.Text = state.Refund;
+            _points.Text = state.Points;
+            _blocker.Text = state.Message;
+            _blocker.Tone = state.MessageTone.ToLabelTone();
+            _submit.Enabled = state.CanSubmit;
+            _returnAll.Enabled = state.CanReturnAll;
+            _clear.Enabled = state.HasInvoice;
+            if (state.HasInvoice)
             {
-                _windowBadge.Set("Đã trả hết", BadgeKind.Neutral);
+                _cash.Checked = state.RefundMethod == PaymentMethod.Cash;
+                _transfer.Checked = state.RefundMethod == PaymentMethod.BankTransfer;
             }
-            else if (sale.IsWithinReturnWindow)
-            {
-                _windowBadge.Set("Trong hạn đổi trả", BadgeKind.Success);
-            }
-            else
-            {
-                _windowBadge.Set("Quá hạn đổi trả", sale.CanReturn ? BadgeKind.Warning : BadgeKind.Danger);
-            }
-
-            var parts = new List<string>
-            {
-                sale.Code,
-                StoreTime(sale.SaleDate).ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture),
-                sale.CustomerName ?? "Khách lẻ",
-                $"Tổng {Vnd.Format(sale.Total)}",
-            };
-            if (sale.RefundedTotal > 0)
-            {
-                parts.Add($"đã hoàn {Vnd.Format(sale.RefundedTotal)}");
-            }
-
-            _invoiceInfo.Text = string.Join(" · ", parts);
-
-            _lineCount.Text = $"{sheet.SelectedLineCount} dòng · SL {sheet.SelectedQuantity.ToString("#,0.###", Vnd.Culture)}";
-            _writtenOff.Text = Vnd.Format(sheet.WrittenOffRefund);
-            _refund.Text = Vnd.Format(sheet.RefundTotal);
-            _points.Text = DescribePoints(sheet);
-
-            _cash.Checked = sheet.RefundMethod == PaymentMethod.Cash;
-            _transfer.Checked = sheet.RefundMethod == PaymentMethod.BankTransfer;
-
-            var blocker = sheet.Blocker ?? ScreenBlocker;
-            _blocker.Text = blocker ?? sheet.Summary + ".";
-            _blocker.Tone = blocker is null ? LabelTone.Muted : LabelTone.Warning;
-            _submit.Enabled = blocker is null && !_busy;
-            _returnAll.Enabled = sheet.CanReturnAnything;
 
             _grid.Reload();
             UpdateLineButtons();
@@ -700,37 +373,54 @@ internal sealed class ReturnScreen : UserControl
         }
     }
 
-    private static string DescribePoints(ReturnSheet sheet)
-    {
-        if (sheet.Sale.CustomerId is null)
-        {
-            return string.Empty;
-        }
-
-        var parts = new List<string>();
-        if (sheet.PointsToReverse > 0)
-        {
-            parts.Add($"Trừ {sheet.PointsToReverse.ToString("#,0", Vnd.Culture)} điểm đã tích");
-        }
-
-        if (sheet.PointsToRestore > 0)
-        {
-            parts.Add($"hoàn lại {sheet.PointsToRestore.ToString("#,0", Vnd.Culture)} điểm đã dùng");
-        }
-
-        return parts.Count == 0 ? "Không thay đổi điểm tích lũy." : string.Join(", ", parts) + ".";
-    }
-
-    private DateTime StoreTime(DateTimeOffset value) => value.ToOffset(_options.StoreUtcOffset).DateTime;
-
-    private void ShowStatus(string text, LabelTone tone)
+    void IReturnView.ShowStatus(string text, Tone tone)
     {
         _status.Text = text;
-        _status.Tone = tone;
+        _status.Tone = tone.ToLabelTone();
     }
 
-    private bool Confirm(string text) =>
-        ModernDialog.Show(this, text, "Trả hàng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+    void IReturnView.ShowHistory(string text, Tone tone)
+    {
+        _previousReturns.Text = text;
+        _previousReturns.Tone = tone.ToLabelTone();
+    }
+
+    void IReturnView.SetScanText(string text) => _scan.Text = text;
+
+    void IReturnView.FocusScan()
+    {
+        _scan.Focus();
+        _scan.SelectAll();
+    }
+
+    void IReturnView.FocusLines() => _grid.InnerGrid.Focus();
+
+    decimal? IReturnView.AskQuantity(string prompt, string unit, decimal start)
+    {
+        using var dialog = new PosQuantityDialog(prompt, unit, start);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Quantity : null;
+    }
+
+    void IReturnView.ShowSlip(string title, Func<int, IReadOnlyList<ReceiptLine>> layout, int paperWidthMm)
+    {
+        using var preview = new ReceiptPreviewForm(layout, title, title, paperWidthMm);
+        preview.ShowDialog(this);
+    }
+
+    void IReturnView.Beep() => System.Media.SystemSounds.Beep.Play();
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, cancelText: "Không", danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
+
+    // ---- Layout helpers ----------------------------------------------------------------------------
 
     private static ModernButton ToolbarButton(string text, string? glyph, EventHandler onClick)
     {

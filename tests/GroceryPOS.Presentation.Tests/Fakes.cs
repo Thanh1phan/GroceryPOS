@@ -9,6 +9,7 @@ using GroceryPOS.Application.Partners;
 using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Reports.Export;
+using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
@@ -251,6 +252,9 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IReportService>(sp => sp.GetRequiredService<FakeReportService>());
         services.AddSingleton(ReportExports);
         services.AddScoped<IReportExportService>(sp => sp.GetRequiredService<FakeReportExportService>());
+        services.AddSingleton(Returns);
+        services.AddScoped<IReturnService>(sp => sp.GetRequiredService<FakeReturnService>());
+        services.AddScoped(_ => SalesOptions);
         services.AddSingleton<TimeProvider>(Clock);
         services.AddPresentation();
         Provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true });
@@ -289,6 +293,11 @@ internal sealed class TestHost : IDisposable
     public FakeReportService Reports { get; } = new();
 
     public FakeReportExportService ReportExports { get; } = new();
+
+    public FakeReturnService Returns { get; } = new();
+
+    /// <summary>Read per scope (like the settings-backed options of the app), so tests can change it between actions.</summary>
+    public SalesOptions SalesOptions { get; set; } = SalesOptions.Default;
 
     public FixedClock Clock { get; } = new();
 
