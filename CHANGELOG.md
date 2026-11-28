@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-11-28
+- **Bán hàng** moved to MVP – the last main screen: `Presentation.Sales.PosPresenter` (scan / search / price check, line and invoice discounts, member and points, tender, F9 checkout with receipt preview, Ctrl+P reprint, F10/F11 park and resume, shift, customer display). Member card, totals, tender and button states come from the tested `PosBoard`, the shift line from `PosShiftBar`; `PosScreen` is now a passive `BaseUserControl` view resolved through DI.
+- **Fast scanning no longer loses codes**: the scan box is emptied as soon as Enter is pressed and scans are looked up one at a time in the order scanned. Before, a code scanned while the previous one was still being looked up was wiped when that lookup finished; a code that is not found now comes back into the box only if the cashier has not started the next one.
+- **F9 right after the last scan includes that item**: paying waits for scans still being looked up (previously the bill could be paid without the last item, which then landed alone in the next cart). Park (F10) and resume (F11) wait the same way.
+- **Unpaid cart is no longer lost when leaving the screen**: switching menu items, signing out or closing the window with items in the cart asks "Đơn hàng đang bán (… sản phẩm, …) chưa thanh toán…" (red Bỏ đơn / Tiếp tục bán). F9 without a shift re-reads it (opened on Ca làm việc meanwhile) or offers Mở ca and then goes on paying instead of stopping; cancelling a multi-match search keeps the typed text.
+- 38 new tests (Domain 149, Application 493, Infrastructure 63, UI.Controls 444, Presentation 444 – all passing).
+
 ## 2026-11-27
 - **Trả hàng** moved to MVP: `Presentation.Sales.ReturnPresenter` (scan an invoice with "newest scan wins", pick lines F4/Space/+/−/F6/F7, reason and refund method, F9 Hoàn tiền with a red confirmation, refund slip preview, Esc Làm lại). Badge, header, refund card and the message under it come from the tested `ReturnScreenState`; `ReturnScreen` is now a passive `BaseUserControl` view resolved through DI (F5 reloads).
 - **Cash refund after opening a shift elsewhere**: the screen read the shift only once, so a cashier who opened the shift on the POS screen afterwards still got "Bạn chưa mở ca…" until reopening Trả hàng. The shift is now re-checked before every cash refund (and on F5).
@@ -144,7 +151,7 @@
 - Restore is confirmed in a red dialog, refuses broken files and backups from a newer version, first saves the current data as a "Trước khi phục hồi" copy, applies pending migrations to older backups, records `backup.restored` in the restored audit log and restarts the app.
 - **Automatic backup** at start-up when the newest backup is older than `Backup:AutomaticIntervalHours` (24 h); retention keeps the newest 14 automatic and 5 pre-restore copies, never manual ones. Application: `IBackupService`, `BackupFileName`, `BackupPolicy`, `BackupText`; Infrastructure: `SqliteBackupEngine` (online backup API, `.tmp` then rename) and `SqlServerBackupEngine` (`BACKUP DATABASE … COPY_ONLY`).
 - New audit actions `backup.created`, `backup.restored` (critical), `backup.deleted` in `AuditCatalog`.
-- 41 new tests (Domain 149, Application 446, Infrastructure 53, UI.Controls 377 – all passing).
+- 38 new tests (Domain 149, Application 446, Infrastructure 53, UI.Controls 377 – all passing).
 
 ## 2026-11-05
 - New **Cấu hình** screen in `GroceryPOS.App` (sidebar → Báo cáo & Hệ thống, `settings.manage`) with tabs **Cửa hàng** (tên, địa chỉ, điện thoại, MST), **Hóa đơn** (lời cảm ơn with line/character counter, khổ 80/58mm, auto preview after checkout), **Tích điểm** (VND per point and value per point, 0 = off, plain-language summary "hóa đơn 250.000 ₫ được 25 điểm · hoàn lại 1%"), **Bán hàng** (hạn đổi trả, cho bán khi hết tồn, bắt buộc mở ca, lệch két cần ghi chú) and **Giao diện** (sáng/tối). Fields are validated as you type, risky choices are flagged in amber, and a sample receipt on the right is re-laid out live with the edited values ("Xem bản in…" opens the print preview). Ctrl+S lists every change before saving; Hoàn tác and Khôi phục mặc định (appsettings values).

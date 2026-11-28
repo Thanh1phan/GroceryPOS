@@ -1,16 +1,14 @@
-using GroceryPOS.Application.Abstractions;
-using GroceryPOS.Application.Common;
 using GroceryPOS.Application.Formatting;
 using GroceryPOS.Application.Sales;
 using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.App.Forms.Shifts;
-using GroceryPOS.Domain.Common;
-using GroceryPOS.Domain.Identity;
 using GroceryPOS.Domain.Sales;
+using GroceryPOS.Presentation.Mvp;
+using GroceryPOS.Presentation.Sales;
 using GroceryPOS.UI.Controls.Buttons;
 using GroceryPOS.UI.Controls.Display;
-using GroceryPOS.UI.Controls.Feedback;
+using GroceryPOS.UI.Controls.Forms;
 using GroceryPOS.UI.Controls.Grids;
 using GroceryPOS.UI.Controls.Icons;
 using GroceryPOS.UI.Controls.Inputs;
@@ -21,22 +19,19 @@ namespace GroceryPOS.App.Forms.Pos;
 
 /// <summary>
 /// Counter screen (Bán hàng). Left: scan box + cart. Right: member, totals, tender and pay.
-/// All state lives in the UI-free <see cref="PosCart"/>; this control renders it and maps keys:
+/// Passive MVP view: the logic lives in <see cref="PosPresenter"/>, the cart in the UI-free <see cref="PosCart"/>,
+/// and everything beside the cart comes from the tested <see cref="PosBoard"/>. Keys:
 /// F2 quét mã · F3 tìm sản phẩm · F4 số lượng · F5 khách hàng · F6 giảm giá dòng · F7 giảm giá hóa đơn ·
 /// F8 khách đưa · F9 thanh toán · F10 lưu tạm đơn · F11 đơn đang chờ · F12 kiểm tra giá · Ctrl+P in lại hóa đơn ·
 /// +/− số lượng · Delete xóa dòng · Esc hủy đơn. "Màn hình khách" opens the customer-facing display (second monitor).
 /// When <see cref="SalesOptions.RequireOpenShift"/> is on, the cashier is asked to open a shift on entry and cannot pay without one.
 /// </summary>
-internal sealed class PosScreen : UserControl
+internal sealed class PosScreen : BaseUserControl, IPosView
 {
     private const int SidePanelWidth = 400;
 
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly bool _canDiscount;
-    private readonly PosCart _cart;
-    private readonly StoreProfile _store;
-    private readonly SalesOptions _options;
-    private readonly ICurrentUser _currentUser;
+    private readonly PosPresenter _presenter;
     private readonly ToneLabel _shiftInfo;
     private readonly ModernButton _openShift;
 
@@ -50,6 +45,7 @@ internal sealed class PosScreen : UserControl
     private readonly ModernButton _parked;
     private readonly ModernButton _customerDisplay;
     private readonly TimeProvider _clock;
+    private readonly bool _canDiscount;
 
     private readonly ModernTextBox _phone;
     private readonly ToneLabel _customerInfo;
@@ -76,29 +72,16 @@ internal sealed class PosScreen : UserControl
     private readonly ModernButton _pay;
 
     private bool _rendering;
-    private bool _busy;
-    private decimal _quickCashTotal = -1;
-    private string? _lastInvoiceCode;
-    private ShiftSummaryDto? _shift;
+    private string _quickCashKey = string.Empty;
     private CustomerDisplayForm? _display;
-    private PosCartLine? _lastTouched;
-    private bool _showingThanks;
-    private string? _shiftProblem;
 
-    public PosScreen(IServiceScopeFactory scopeFactory, ICurrentUser currentUser)
+    public PosScreen(IServiceProvider services)
     {
-        _scopeFactory = scopeFactory;
-        _currentUser = currentUser;
-        _canDiscount = currentUser.HasPermission(Permissions.SalesDiscount);
-        Dock = DockStyle.Fill;
-
-        using (var scope = scopeFactory.CreateScope())
-        {
-            _options = scope.ServiceProvider.GetService<SalesOptions>() ?? SalesOptions.Default;
-            _cart = new PosCart(_options.Loyalty);
-            _store = scope.ServiceProvider.GetService<StoreProfile>() ?? StoreProfile.Default;
-            _clock = scope.ServiceProvider.GetService<TimeProvider>() ?? TimeProvider.System;
-        }
+        _scopeFactory = services.GetRequiredService<IServiceScopeFactory>();
+        _presenter = services.GetRequiredService<PosPresenter>();
+        _clock = services.GetService<TimeProvider>() ?? TimeProvider.System;
+        _canDiscount = _presenter.CanDiscount;
+        RefreshOnF5 = false; // F5 = khách hàng on this screen
 
         // ---- Left: scan box, status, cart ---------------------------------------------------------
         _scan = new ModernTextBox
@@ -109,8 +92,14 @@ internal sealed class PosScreen : UserControl
             PlaceholderText = "Quét mã vạch / nhập mã hoặc tên sản phẩm (F2) – 3*mã để bán 3 cái",
             ReserveMessageSpace = false,
         };
-        _scan.EnterPressed += async (_, _) => await ScanAsync();
-        _scan.TrailingIconClick += (_, _) => OpenSearch(_scan.Text);
+        _scan.EnterPressed += async (_, _) =>
+        {
+            // Empty the box at once so a fast scanner can start the next code while this one is looked up.
+            var text = _scan.Text;
+            _scan.Clear();
+            await _presenter.ScanAsync(text);
+        };
+        _scan.TrailingIconClick += (_, _) => _presenter.OpenSearch(_scan.Text);
 
         _status = new ToneLabel
         {
@@ -121,7 +110,6 @@ internal sealed class PosScreen : UserControl
             TextAlign = ContentAlignment.MiddleLeft,
             Font = ThemeFonts.Get(FontRole.Subtitle),
             Tone = LabelTone.Muted,
-            Text = "Sẵn sàng bán hàng.",
         };
 
         _grid = new ModernDataGrid
@@ -145,28 +133,27 @@ internal sealed class PosScreen : UserControl
         }
 
         _grid.InnerGrid.CellFormatting += OnCellFormatting;
-        _grid.RowActivated += (_, _) => EditQuantity();
-        _grid.SelectionChanged += (_, _) => UpdateLineButtons();
+        _grid.RowActivated += (_, _) => _presenter.EditQuantity(SelectedLine);
 
-        var plus = ToolbarButton("+1", null, (_, _) => Step(1));
-        var minus = ToolbarButton("−1", null, (_, _) => Step(-1));
-        _quantity = ToolbarButton("Số lượng (F4)", Glyphs.Edit, (_, _) => EditQuantity());
-        _lineDiscount = ToolbarButton("Giảm giá dòng (F6)", Glyphs.Money, (_, _) => EditLineDiscount());
-        _removeLine = ToolbarButton("Xóa dòng (Del)", Glyphs.Delete, (_, _) => RemoveLine());
+        var plus = ToolbarButton("+1", null, (_, _) => _presenter.Step(SelectedLine, 1));
+        var minus = ToolbarButton("−1", null, (_, _) => _presenter.Step(SelectedLine, -1));
+        _quantity = ToolbarButton("Số lượng (F4)", Glyphs.Edit, (_, _) => _presenter.EditQuantity(SelectedLine));
+        _lineDiscount = ToolbarButton("Giảm giá dòng (F6)", Glyphs.Money, (_, _) => _presenter.EditLineDiscount(SelectedLine));
+        _removeLine = ToolbarButton("Xóa dòng (Del)", Glyphs.Delete, (_, _) => _presenter.RemoveLine(SelectedLine));
         _removeLine.Variant = ButtonVariant.Danger;
-        var reprint = ToolbarButton("In lại HĐ (Ctrl+P)", Glyphs.Print, async (_, _) => await ReprintAsync());
-        _park = ToolbarButton("Lưu tạm (F10)", Glyphs.Save, async (_, _) => await ParkAsync());
-        _parked = ToolbarButton("Đơn chờ (F11) · 00", Glyphs.History, async (_, _) => await ShowParkedAsync());
-        _parked.Text = "Đơn chờ (F11)";
-        var priceCheck = ToolbarButton("Kiểm giá (F12)", Glyphs.Search, (_, _) => PriceCheck());
+        var reprint = ToolbarButton("In lại HĐ (Ctrl+P)", Glyphs.Print, async (_, _) => await _presenter.ReprintAsync());
+        _park = ToolbarButton("Lưu tạm (F10)", Glyphs.Save, async (_, _) => await _presenter.ParkAsync());
+        _parked = ToolbarButton("Đơn chờ (F11) · 00", Glyphs.History, async (_, _) => await _presenter.ShowParkedAsync());
+        _parked.Text = PosTexts.ParkedCaption(0);
+        var priceCheck = ToolbarButton("Kiểm giá (F12)", Glyphs.Search, (_, _) => _presenter.PriceCheck());
         _customerDisplay = ToolbarButton("Màn hình khách: tắt", Glyphs.Shop, (_, _) => ToggleCustomerDisplay());
         _customerDisplay.Text = "Màn hình khách";
         _grid.ToolbarItems.Controls.AddRange([plus, minus, _quantity, _lineDiscount, _removeLine, reprint, _park, _parked, priceCheck, _customerDisplay]);
 
         // ---- Shift bar: current shift, or "Mở ca" when none is open ------------------------------
-        _shiftInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 10, 12, 0), Text = "Đang kiểm tra ca làm việc…" };
+        _shiftInfo = new ToneLabel { AutoSize = true, Tone = LabelTone.Muted, Margin = new Padding(0, 10, 12, 0) };
         _openShift = new ModernButton { Text = "Mở ca", Variant = ButtonVariant.Primary, IconGlyph = Glyphs.Add, Size = new Size(110, 34), Visible = false };
-        _openShift.Click += async (_, _) => await PromptOpenShiftAsync();
+        _openShift.Click += async (_, _) => await _presenter.OpenShiftAsync();
         var shiftBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 42, WrapContents = false, Padding = new Padding(0, 0, 0, 6) };
         shiftBar.Controls.AddRange([_shiftInfo, _openShift]);
 
@@ -196,22 +183,24 @@ internal sealed class PosScreen : UserControl
             PlaceholderText = "SĐT khách hàng (F5)",
             ReserveMessageSpace = false,
         };
-        _phone.EnterPressed += async (_, _) => await FindCustomerAsync();
-        _phone.TrailingIconClick += async (_, _) => await FindCustomerAsync();
+        _phone.EnterPressed += async (_, _) => await _presenter.FindCustomerAsync(_phone.Text);
+        _phone.TrailingIconClick += async (_, _) => await _presenter.FindCustomerAsync(_phone.Text);
 
         _customerInfo = Value(LabelTone.Muted, "Khách lẻ");
         _customerInfo.TextAlign = ContentAlignment.MiddleLeft;
 
         _points = new ModernNumericBox { Dock = DockStyle.Fill, Minimum = 0, Maximum = 1_000_000, SuffixText = "điểm", Enabled = false, ReserveMessageSpace = false };
-        _points.ValueChanged += (_, _) => ApplyPoints();
-        _maxPoints = new ModernButton { Text = "Dùng tối đa", Variant = ButtonVariant.Secondary, Dock = DockStyle.Fill, Enabled = false };
-        _maxPoints.Click += (_, _) => _points.Value = _cart.MaxRedeemablePoints;
-        _detachCustomer = new ModernButton { Text = "Bỏ chọn khách", Variant = ButtonVariant.Ghost, Dock = DockStyle.Fill, Enabled = false };
-        _detachCustomer.Click += (_, _) =>
+        _points.ValueChanged += (_, _) =>
         {
-            _cart.DetachCustomer();
-            _phone.Clear();
+            if (!_rendering)
+            {
+                _presenter.RedeemPoints((int)_points.ValueOrZero);
+            }
         };
+        _maxPoints = new ModernButton { Text = "Dùng tối đa", Variant = ButtonVariant.Secondary, Dock = DockStyle.Fill, Enabled = false };
+        _maxPoints.Click += (_, _) => _presenter.UseMaxPoints();
+        _detachCustomer = new ModernButton { Text = "Bỏ chọn khách", Variant = ButtonVariant.Ghost, Dock = DockStyle.Fill, Enabled = false };
+        _detachCustomer.Click += (_, _) => _presenter.DetachCustomer();
 
         _gross = Value();
         _lineDiscounts = Value();
@@ -230,14 +219,20 @@ internal sealed class PosScreen : UserControl
             Dock = DockStyle.Fill,
             Enabled = _canDiscount,
         };
-        _invoiceDiscountButton.Click += (_, _) => EditInvoiceDiscount();
+        _invoiceDiscountButton.Click += (_, _) => _presenter.EditInvoiceDiscount();
 
         _cash = new RadioButton { Text = "Tiền mặt", AutoSize = true, Checked = true };
         _transfer = new RadioButton { Text = "Chuyển khoản", AutoSize = true };
         _card = new RadioButton { Text = "Thẻ", AutoSize = true };
         foreach (var radio in new[] { _cash, _transfer, _card })
         {
-            radio.CheckedChanged += (_, _) => OnMethodChanged();
+            radio.CheckedChanged += (_, _) =>
+            {
+                if (!_rendering && radio.Checked)
+                {
+                    _presenter.SetPaymentMethod(_transfer.Checked ? PaymentMethod.BankTransfer : _card.Checked ? PaymentMethod.Card : PaymentMethod.Cash);
+                }
+            };
         }
 
         var methods = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = false, Margin = new Padding(0, 4, 0, 4) };
@@ -248,7 +243,7 @@ internal sealed class PosScreen : UserControl
         {
             if (!_rendering)
             {
-                TryCart(() => _cart.SetCashTendered(_tendered.ValueOrZero));
+                _presenter.SetCashTendered(_tendered.ValueOrZero);
             }
         };
 
@@ -259,7 +254,7 @@ internal sealed class PosScreen : UserControl
         {
             if (!_rendering)
             {
-                _cart.SetPaymentReference(_reference.Text);
+                _presenter.SetPaymentReference(_reference.Text);
             }
         };
 
@@ -278,10 +273,14 @@ internal sealed class PosScreen : UserControl
             Height = 56,
             Font = ThemeFonts.Get(FontRole.Title, FontStyle.Bold),
         };
-        _pay.Click += async (_, _) => await CheckoutAsync();
+        _pay.Click += async (_, _) =>
+        {
+            _tendered.Commit();
+            await _presenter.CheckoutAsync();
+        };
 
         var cancelSale = new ModernButton { Text = "Hủy đơn (Esc)", Variant = ButtonVariant.Secondary, Dock = DockStyle.Fill };
-        cancelSale.Click += (_, _) => CancelSale();
+        cancelSale.Click += (_, _) => _presenter.CancelSale();
 
         AddSpan(side, Section("Khách hàng"));
         AddSpan(side, _phone, 44);
@@ -326,114 +325,27 @@ internal sealed class PosScreen : UserControl
         Controls.Add(left);
         Controls.Add(sideHost);
 
-        _cart.Changed += (_, _) => Render();
         Disposed += (_, _) => _display?.Close();
-        Load += async (_, _) =>
-        {
-            Render();
-            FocusScan();
-            await RefreshParkedCountAsync();
-            await LoadShiftAsync(promptToOpen: true);
-        };
+        _presenter.Attach(this);
     }
 
-    // ---- Shift -------------------------------------------------------------------------------------
+    bool IView.IsAlive => IsAlive;
 
-    private bool ShiftMissing => _options.RequireOpenShift && _shift is null;
+    private PosCartLine? SelectedLine => _grid.GetSelected<PosCartLine>();
 
-    /// <summary>Loads the cashier's open shift; with <paramref name="promptToOpen"/> offers the open-shift dialog when there is none.</summary>
-    private async Task LoadShiftAsync(bool promptToOpen)
+    public override bool CanLeave() => _presenter.CanLeave();
+
+    protected override async Task OnFirstLoadAsync()
     {
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            _shiftProblem = result.IsFailure ? result.Error.Message : null;
-            _shift = result.IsSuccess ? result.Value.Current : null;
-            RenderShift();
-            Render();
-            if (result.IsFailure || _shift is not null || !_options.RequireOpenShift || !promptToOpen)
-            {
-                return;
-            }
-
-            OpenShiftDialog(result.Value.SuggestedOpeningFloat);
-        }
-    }
-
-    private async Task PromptOpenShiftAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IShiftService>().GetCurrentAsync();
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Show(this, result.Error.Message, "Mở ca", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (result.Value.Current is { } open)
-        {
-            _shift = open;
-            RenderShift();
-            Render();
-            return;
-        }
-
-        OpenShiftDialog(result.Value.SuggestedOpeningFloat);
-    }
-
-    private void OpenShiftDialog(decimal suggestedFloat)
-    {
-        using var dialog = new OpenShiftDialog(_scopeFactory, suggestedFloat, _currentUser.Session?.FullName);
-        if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Opened is { } opened)
-        {
-            _shift = opened;
-            ShowStatus($"Đã mở ca {opened.Code} với tiền đầu ca {Vnd.Format(opened.OpeningFloat)}.", LabelTone.Success);
-        }
-
-        RenderShift();
-        Render();
-        FocusScan();
-    }
-
-    private void RenderShift()
-    {
-        if (_shift is { } shift)
-        {
-            var openedAt = shift.OpenedAt.ToOffset(_options.StoreUtcOffset).ToString("HH:mm dd/MM", System.Globalization.CultureInfo.InvariantCulture);
-            _shiftInfo.Text = $"Ca {shift.Code} · mở lúc {openedAt} · tiền đầu ca {Vnd.Format(shift.OpeningFloat)}";
-            _shiftInfo.Tone = LabelTone.Muted;
-            _openShift.Visible = false;
-            return;
-        }
-
-        if (_shiftProblem is not null)
-        {
-            _shiftInfo.Text = _options.RequireOpenShift ? $"Không thể bán hàng: {_shiftProblem}" : _shiftProblem;
-            _shiftInfo.Tone = _options.RequireOpenShift ? LabelTone.Danger : LabelTone.Muted;
-            _openShift.Visible = false;
-            return;
-        }
-
-        _shiftInfo.Text = _options.RequireOpenShift ? "Chưa mở ca – cần mở ca trước khi thanh toán." : "Chưa mở ca.";
-        _shiftInfo.Tone = _options.RequireOpenShift ? LabelTone.Warning : LabelTone.Muted;
-        _openShift.Visible = true;
+        ((IPosView)this).FocusScan();
+        await _presenter.StartAsync();
     }
 
     // ---- Keyboard ----------------------------------------------------------------------------------
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (_busy)
+        if (_presenter.IsBusy)
         {
             return base.ProcessCmdKey(ref msg, keyData);
         }
@@ -443,209 +355,60 @@ internal sealed class PosScreen : UserControl
         switch (keyData)
         {
             case Keys.F2:
-                FocusScan();
+                ((IPosView)this).FocusScan();
                 return true;
             case Keys.F3:
-                OpenSearch(_scan.Text);
+                _presenter.OpenSearch(_scan.Text);
                 return true;
             case Keys.F4:
-                EditQuantity();
+                _presenter.EditQuantity(SelectedLine);
                 return true;
             case Keys.F5:
                 _phone.Focus();
                 _phone.SelectAll();
                 return true;
             case Keys.F6:
-                EditLineDiscount();
+                _presenter.EditLineDiscount(SelectedLine);
                 return true;
             case Keys.F7:
-                EditInvoiceDiscount();
+                _presenter.EditInvoiceDiscount();
                 return true;
             case Keys.F8:
-                _cash.Checked = true;
+                _presenter.SetPaymentMethod(PaymentMethod.Cash);
                 _tendered.Focus();
                 _tendered.SelectAll();
                 return true;
             case Keys.F9:
-                _ = CheckoutAsync();
+                _tendered.Commit();
+                _ = _presenter.CheckoutAsync();
                 return true;
             case Keys.F10:
-                _ = ParkAsync();
+                _ = _presenter.ParkAsync();
                 return true;
             case Keys.F11:
-                _ = ShowParkedAsync();
+                _ = _presenter.ShowParkedAsync();
                 return true;
             case Keys.F12:
-                PriceCheck();
+                _presenter.PriceCheck();
                 return true;
             case Keys.Control | Keys.P:
-                _ = ReprintAsync();
+                _ = _presenter.ReprintAsync();
                 return true;
             case Keys.Escape:
-                CancelSale();
+                _presenter.CancelSale();
                 return true;
             case Keys.Delete when gridFocused || scanEmpty:
-                RemoveLine();
+                _presenter.RemoveLine(SelectedLine);
                 return true;
             case Keys.Add or Keys.Oemplus when gridFocused || scanEmpty:
-                Step(1);
+                _presenter.Step(SelectedLine, 1);
                 return true;
             case Keys.Subtract or Keys.OemMinus when gridFocused || scanEmpty:
-                Step(-1);
+                _presenter.Step(SelectedLine, -1);
                 return true;
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
-    }
-
-    // ---- Scan & search -----------------------------------------------------------------------------
-
-    private async Task ScanAsync()
-    {
-        var (quantity, text) = PosCart.ParseScan(_scan.Text);
-        if (text.Length == 0)
-        {
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var lookup = scope.ServiceProvider.GetRequiredService<IPosLookupService>();
-        var found = await lookup.FindForScanAsync(text);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (found.IsSuccess)
-        {
-            AddToCart(found.Value, quantity);
-            _scan.Clear();
-            return;
-        }
-
-        // Not a barcode/code: treat it as a name search. One hit is added directly.
-        var matches = await lookup.SearchAsync(text, take: 2);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (matches.Count == 1)
-        {
-            AddToCart(matches[0], quantity);
-            _scan.Clear();
-        }
-        else if (matches.Count > 1)
-        {
-            OpenSearch(text, quantity);
-        }
-        else
-        {
-            ShowStatus(found.Error.Message, LabelTone.Danger);
-            System.Media.SystemSounds.Beep.Play();
-            _scan.SelectAll();
-        }
-    }
-
-    private void OpenSearch(string term, decimal quantity = 1)
-    {
-        using var dialog = new PosProductSearchDialog(_scopeFactory, PosCart.ParseScan(term).Text);
-        if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedProduct is { } product)
-        {
-            AddToCart(product, quantity);
-            _scan.Clear();
-        }
-
-        FocusScan();
-    }
-
-    private void AddToCart(PosProductDto product, decimal quantity)
-    {
-        PosCartLine? line = null;
-        if (!TryCart(() => line = _cart.Add(product, quantity)) || line is null)
-        {
-            return;
-        }
-
-        _grid.SelectItem(line);
-        _lastTouched = line;
-        UpdateCustomerDisplay();
-        var text = $"Đã thêm {line.Name} × {line.Quantity.ToString("0.###", Vnd.Culture)} – {Vnd.Format(line.NetAmount)}";
-        ShowStatus(line.ExceedsStock ? $"{text} (vượt tồn kho: còn {product.StockQuantity.ToString("0.###", Vnd.Culture)})" : text,
-            line.ExceedsStock ? LabelTone.Warning : LabelTone.Success);
-    }
-
-    // ---- Line actions ------------------------------------------------------------------------------
-
-    private PosCartLine? SelectedLine => _grid.GetSelected<PosCartLine>() ?? _cart.Lines.LastOrDefault();
-
-    private void Step(decimal delta)
-    {
-        if (SelectedLine is { } line)
-        {
-            TryCart(() => _cart.Increment(line, delta));
-            if (_cart.Lines.Contains(line))
-            {
-                _grid.SelectItem(line);
-            }
-        }
-    }
-
-    private void EditQuantity()
-    {
-        if (SelectedLine is not { } line)
-        {
-            return;
-        }
-
-        using var dialog = new PosQuantityDialog(line.Name, line.Unit, line.Quantity);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            TryCart(() => _cart.SetQuantity(line, dialog.Quantity));
-            _grid.SelectItem(line);
-        }
-
-        FocusScan();
-    }
-
-    private void EditLineDiscount()
-    {
-        if (!_canDiscount)
-        {
-            ShowStatus("Bạn không có quyền giảm giá khi bán.", LabelTone.Danger);
-            return;
-        }
-
-        if (SelectedLine is not { } line)
-        {
-            return;
-        }
-
-        using var dialog = new PosDiscountDialog($"Giảm giá – {line.Name}", line.GrossAmount, line.Discount);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            TryCart(() => _cart.SetLineDiscount(line, dialog.Discount));
-            _grid.SelectItem(line);
-        }
-
-        FocusScan();
-    }
-
-    private void RemoveLine()
-    {
-        if (SelectedLine is { } line)
-        {
-            TryCart(() => _cart.Remove(line));
-            ShowStatus($"Đã xóa {line.Name}.", LabelTone.Muted);
-        }
-    }
-
-    private void UpdateLineButtons()
-    {
-        var hasLine = !_cart.IsEmpty;
-        _quantity.Enabled = hasLine;
-        _removeLine.Enabled = hasLine;
-        _lineDiscount.Enabled = hasLine && _canDiscount;
     }
 
     private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
@@ -662,413 +425,7 @@ internal sealed class PosScreen : UserControl
         }
     }
 
-    // ---- Customer & points -------------------------------------------------------------------------
-
-    private async Task FindCustomerAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_phone.Text))
-        {
-            _cart.DetachCustomer();
-            return;
-        }
-
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IPosLookupService>().FindCustomerByPhoneAsync(_phone.Text);
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            _phone.SetError(result.Error.Message);
-            return;
-        }
-
-        _phone.ClearValidation();
-        _cart.AttachCustomer(PosCustomer.From(result.Value));
-        ShowStatus($"Khách hàng: {result.Value.Name} ({result.Value.LoyaltyPoints:#,0} điểm)", LabelTone.Success);
-        FocusScan();
-    }
-
-    private void ApplyPoints()
-    {
-        if (_rendering)
-        {
-            return;
-        }
-
-        var requested = (int)_points.ValueOrZero;
-        if (!TryCart(() => _cart.RedeemPoints(requested)))
-        {
-            // Fall back to the most the bill allows rather than leaving an invalid number in the box.
-            TryCart(() => _cart.RedeemPoints(_cart.MaxRedeemablePoints));
-        }
-    }
-
-    // ---- Invoice discount & payment ----------------------------------------------------------------
-
-    private void EditInvoiceDiscount()
-    {
-        if (!_canDiscount)
-        {
-            ShowStatus("Bạn không có quyền giảm giá khi bán.", LabelTone.Danger);
-            return;
-        }
-
-        if (_cart.IsEmpty)
-        {
-            return;
-        }
-
-        using var dialog = new PosDiscountDialog("Giảm giá hóa đơn", _cart.Subtotal, _cart.InvoiceDiscount);
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            TryCart(() => _cart.SetInvoiceDiscount(dialog.Discount));
-        }
-
-        FocusScan();
-    }
-
-    private void OnMethodChanged()
-    {
-        if (_rendering)
-        {
-            return;
-        }
-
-        var method = _transfer.Checked ? PaymentMethod.BankTransfer : _card.Checked ? PaymentMethod.Card : PaymentMethod.Cash;
-        if (method != _cart.PaymentMethod)
-        {
-            _cart.SetPaymentMethod(method);
-        }
-    }
-
-    private async Task CheckoutAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        if (ShiftMissing)
-        {
-            ShowStatus("Chưa mở ca – vui lòng mở ca trước khi thanh toán.", LabelTone.Danger);
-            System.Media.SystemSounds.Beep.Play();
-            if (_shiftProblem is null)
-            {
-                await PromptOpenShiftAsync();
-            }
-
-            return;
-        }
-
-        _tendered.Commit();
-        var request = _cart.BuildRequest();
-        if (request.IsFailure)
-        {
-            ShowStatus(request.Error.Message, LabelTone.Danger);
-            System.Media.SystemSounds.Beep.Play();
-            return;
-        }
-
-        _busy = true;
-        _pay.Enabled = false;
-        try
-        {
-            using var scope = _scopeFactory.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<ICheckoutService>().CheckoutAsync(request.Value);
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (result.IsFailure)
-            {
-                ShowStatus(result.Error.Message, LabelTone.Danger);
-                if (result.Error == SaleErrors.NoOpenShift)
-                {
-                    // The shift was closed elsewhere (e.g. "Kết ca hộ" by a manager): back to "Mở ca".
-                    _shift = null;
-                    RenderShift();
-                }
-
-                ModernDialog.Show(this, result.Error.Message, "Thanh toán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            var receipt = result.Value;
-            _cart.Clear();
-            _phone.Clear();
-            _phone.ClearValidation();
-            _lastInvoiceCode = receipt.Code;
-            _showingThanks = true;
-            _display?.Render(CustomerDisplayState.ThankYou(_store.Name, receipt.Total, receipt.AmountPaid, receipt.Change, receipt.PointsEarned));
-            ShowStatus(DescribeReceipt(receipt), LabelTone.Success);
-            if (_store.PreviewReceiptAfterCheckout)
-            {
-                await ShowReceiptAsync(service => service.GetForSaleAsync(receipt.SaleId), keepStatus: true);
-            }
-        }
-        finally
-        {
-            _busy = false;
-            if (!IsDisposed)
-            {
-                Render();
-                FocusScan();
-            }
-        }
-    }
-
-    /// <summary>Reprint (Ctrl+P): asks for the invoice number, pre-filled with the last sale of this counter.</summary>
-    private async Task ReprintAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        string code;
-        using (var dialog = new ReprintDialog(_lastInvoiceCode))
-        {
-            if (dialog.ShowDialog(this) != DialogResult.OK)
-            {
-                FocusScan();
-                return;
-            }
-
-            code = dialog.Code;
-        }
-
-        _busy = true;
-        try
-        {
-            await ShowReceiptAsync(service => service.ReprintAsync(code), keepStatus: false);
-        }
-        finally
-        {
-            _busy = false;
-            if (!IsDisposed)
-            {
-                FocusScan();
-            }
-        }
-    }
-
-    private async Task ShowReceiptAsync(Func<IReceiptService, Task<Result<ReceiptData>>> load, bool keepStatus)
-    {
-        Result<ReceiptData> result;
-        using (var scope = _scopeFactory.CreateScope())
-        {
-            result = await load(scope.ServiceProvider.GetRequiredService<IReceiptService>());
-        }
-
-        if (IsDisposed)
-        {
-            return;
-        }
-
-        if (result.IsFailure)
-        {
-            if (keepStatus)
-            {
-                ModernDialog.Show(this, result.Error.Message, "In hóa đơn", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-            else
-            {
-                ShowStatus(result.Error.Message, LabelTone.Danger);
-            }
-
-            return;
-        }
-
-        using var preview = new ReceiptPreviewForm(result.Value, _store.ReceiptPaperWidthMm);
-        preview.ShowDialog(this);
-        if (!keepStatus && preview.Printed)
-        {
-            ShowStatus($"Đã in lại hóa đơn {result.Value.Code}.", LabelTone.Muted);
-        }
-    }
-
-    private static string DescribeReceipt(CheckoutReceipt receipt)
-    {
-        var text = $"✔ {receipt.Code}: {Vnd.Format(receipt.Total)}";
-        if (receipt.Change > 0)
-        {
-            text += $" · Tiền thừa {Vnd.Format(receipt.Change)}";
-        }
-
-        if (receipt.PointsEarned > 0)
-        {
-            text += $" · +{receipt.PointsEarned} điểm";
-        }
-
-        if (receipt.LowStockAlerts.Count > 0)
-        {
-            text += $" · Sắp hết: {string.Join(", ", receipt.LowStockAlerts.Take(3).Select(a => a.ProductName))}";
-        }
-
-        return text;
-    }
-
-    private void CancelSale()
-    {
-        if (_cart.IsEmpty)
-        {
-            FocusScan();
-            return;
-        }
-
-        if (ModernDialog.Confirm(this, $"Hủy đơn hàng đang bán ({_cart.Lines.Count} sản phẩm)? Giỏ hàng sẽ bị xóa.", "Hủy đơn", "Hủy đơn", "Tiếp tục bán", danger: true))
-        {
-            _cart.Clear();
-            _phone.Clear();
-            _phone.ClearValidation();
-            ShowStatus("Đã hủy đơn hàng.", LabelTone.Muted);
-        }
-
-        FocusScan();
-    }
-
-    // ---- Parked orders, price check, customer display ----------------------------------------------
-
-    /// <summary>Lưu tạm (F10): puts the cart on hold so the next customer can be served.</summary>
-    private async Task ParkAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        if (_cart.IsEmpty)
-        {
-            ShowStatus("Giỏ hàng đang trống – không có gì để lưu tạm.", LabelTone.Muted);
-            FocusScan();
-            return;
-        }
-
-        var defaultLabel = _cart.Customer?.Name ?? "Đơn tạm";
-        using (var dialog = new ParkOrderDialog(_cart.Lines.Count, _cart.Total, defaultLabel))
-        {
-            if (dialog.ShowDialog(this) != DialogResult.OK)
-            {
-                FocusScan();
-                return;
-            }
-
-            await ParkCurrentAsync(dialog.OrderLabel);
-        }
-
-        FocusScan();
-    }
-
-    /// <summary>Parks the current cart; false (with the reason shown) when it could not be parked.</summary>
-    private async Task<bool> ParkCurrentAsync(string? label)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var result = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ParkAsync(_cart, label);
-        if (IsDisposed)
-        {
-            return false;
-        }
-
-        if (result.IsFailure)
-        {
-            ModernDialog.Warning(this, result.Error.Message, "Lưu tạm đơn");
-            return false;
-        }
-
-        _phone.Clear();
-        _phone.ClearValidation();
-        ShowStatus($"Đã lưu tạm \"{result.Value.Label}\" ({result.Value.LineCount} mặt hàng). Nhấn F11 để gọi lại.", LabelTone.Success);
-        Toaster.Info(this, $"{result.Value.Label} · {Vnd.Format(result.Value.Total)}", "Đã lưu tạm đơn");
-        await RefreshParkedCountAsync();
-        return true;
-    }
-
-    /// <summary>Đơn chờ (F11): pick a parked order; a cart in progress is parked first so nothing is lost.</summary>
-    private async Task ShowParkedAsync()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        Guid? chosen;
-        using (var dialog = new ParkedOrdersDialog(_scopeFactory, _clock, _options.StoreUtcOffset, cartBusy: !_cart.IsEmpty))
-        {
-            var answer = dialog.ShowDialog(this);
-            SetParkedCount(dialog.RemainingCount);
-            chosen = answer == DialogResult.OK ? dialog.SelectedOrderId : null;
-        }
-
-        if (chosen is { } id)
-        {
-            if (!_cart.IsEmpty && !await ParkCurrentAsync(null))
-            {
-                FocusScan();
-                return;
-            }
-
-            using var scope = _scopeFactory.CreateScope();
-            var result = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ResumeAsync(id, _cart);
-            if (IsDisposed)
-            {
-                return;
-            }
-
-            if (result.IsFailure)
-            {
-                ModernDialog.Warning(this, result.Error.Message, "Gọi lại đơn");
-            }
-            else
-            {
-                var resumed = result.Value;
-                _phone.Text = _cart.Customer?.Phone ?? string.Empty;
-                ShowStatus($"Đã gọi lại \"{resumed.Order.Label}\" ({resumed.RestoredLines} mặt hàng).",
-                    resumed.HasNotices ? LabelTone.Warning : LabelTone.Success);
-                if (resumed.HasNotices)
-                {
-                    ModernDialog.Warning(this, string.Join("\n", resumed.Notices), "Đơn đã thay đổi từ lúc lưu tạm");
-                }
-            }
-
-            await RefreshParkedCountAsync();
-        }
-
-        FocusScan();
-    }
-
-    private async Task RefreshParkedCountAsync()
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var orders = await scope.ServiceProvider.GetRequiredService<IParkedOrderService>().ListAsync();
-        if (!IsDisposed)
-        {
-            SetParkedCount(orders.Count);
-        }
-    }
-
-    private void SetParkedCount(int count)
-    {
-        _parked.Text = count > 0 ? $"Đơn chờ (F11) · {count}" : "Đơn chờ (F11)";
-        _parked.Variant = count > 0 ? ButtonVariant.Primary : ButtonVariant.Secondary;
-    }
-
-    /// <summary>Kiểm tra giá (F12): look up price and stock without selling; optionally add the product.</summary>
-    private void PriceCheck()
-    {
-        using (var dialog = new PriceCheckDialog(_scopeFactory, canAdd: true))
-        {
-            if (dialog.ShowDialog(this) == DialogResult.OK && dialog.SelectedProduct is { } product)
-            {
-                AddToCart(product, 1);
-            }
-        }
-
-        FocusScan();
-    }
+    // ---- Customer display (second monitor) ---------------------------------------------------------
 
     private void ToggleCustomerDisplay()
     {
@@ -1088,104 +445,73 @@ internal sealed class PosScreen : UserControl
             }
         };
         _customerDisplay.Variant = ButtonVariant.Primary;
-        UpdateCustomerDisplay();
+        _display.Render(_presenter.DisplayState);
         _display.Show(); // not owned: an owned window would stay on top of the counter
-        FocusScan();
+        ((IPosView)this).FocusScan();
     }
 
-    private void UpdateCustomerDisplay()
+    // ---- IPosView ----------------------------------------------------------------------------------
+
+    void IPosView.ShowBoard(PosBoard board)
     {
-        if (_display is not { IsDisposed: false } display)
-        {
-            return;
-        }
-
-        if (!_cart.IsEmpty)
-        {
-            _showingThanks = false;
-        }
-        else if (_showingThanks)
-        {
-            return; // keep "Cảm ơn quý khách / tiền thừa" until the next scan
-        }
-
-        display.Render(CustomerDisplayState.FromCart(_cart, _store.Name, _lastTouched));
-    }
-
-    // ---- Rendering ---------------------------------------------------------------------------------
-
-    private void Render()
-    {
-        UpdateCustomerDisplay();
         _rendering = true;
         try
         {
             var selected = _grid.GetSelected<PosCartLine>();
-            _grid.SetItems(_cart.Lines);
-            if (selected is not null && _cart.Lines.Contains(selected))
+            _grid.SetItems(board.Lines);
+            if (selected is not null && board.Lines.Contains(selected))
             {
                 _grid.SelectItem(selected);
             }
-            else if (_cart.Lines.Count > 0)
+            else if (board.Lines.Count > 0)
             {
-                _grid.SelectItem(_cart.Lines[^1]);
+                _grid.SelectItem(board.Lines[^1]);
             }
 
-            UpdateLineButtons();
+            _quantity.Enabled = board.CanEditLines;
+            _removeLine.Enabled = board.CanEditLines;
+            _lineDiscount.Enabled = board.CanDiscountLines;
 
-            if (_cart.Customer is { } customer)
+            _customerInfo.Text = board.CustomerInfo;
+            _customerInfo.Tone = board.CustomerTone.ToLabelTone();
+            _points.Enabled = board.HasMember;
+            _maxPoints.Enabled = board.CanUseMaxPoints;
+            _detachCustomer.Enabled = board.HasMember;
+            if ((int)_points.ValueOrZero != board.PointsToRedeem)
             {
-                _customerInfo.Text = $"{customer.Name} · {customer.Code}\r\nĐiểm hiện có: {customer.LoyaltyPoints:#,0} (đổi tối đa {_cart.MaxRedeemablePoints:#,0})";
-                _customerInfo.Tone = LabelTone.Normal;
-            }
-            else
-            {
-                _customerInfo.Text = "Khách lẻ";
-                _customerInfo.Tone = LabelTone.Muted;
-            }
-
-            var hasMember = _cart.Customer is not null;
-            _points.Enabled = hasMember;
-            _maxPoints.Enabled = hasMember && _cart.MaxRedeemablePoints > 0;
-            _detachCustomer.Enabled = hasMember;
-            if ((int)_points.ValueOrZero != _cart.PointsToRedeem)
-            {
-                _points.Value = _cart.PointsToRedeem;
+                _points.Value = board.PointsToRedeem;
             }
 
-            _gross.Text = Vnd.Format(_cart.GrossAmount);
-            _lineDiscounts.Text = Minus(_cart.LineDiscountTotal);
-            _invoiceDiscount.Text = Minus(_cart.InvoiceDiscountAmount) + (_cart.InvoiceDiscount is { } d ? $" ({FormatDiscount(d)})" : string.Empty);
-            _pointsDiscount.Text = _cart.PointsToRedeem > 0 ? $"{Minus(_cart.PointsDiscountAmount)} ({_cart.PointsToRedeem:#,0} điểm)" : Minus(0);
-            _total.Text = Vnd.Format(_cart.Total);
-            _earn.Text = hasMember ? $"Khách được cộng {_cart.PointsToEarn:#,0} điểm" : string.Empty;
-            _invoiceDiscountButton.Enabled = _canDiscount && !_cart.IsEmpty;
+            _gross.Text = board.Gross;
+            _lineDiscounts.Text = board.LineDiscounts;
+            _invoiceDiscount.Text = board.InvoiceDiscount;
+            _pointsDiscount.Text = board.PointsDiscount;
+            _total.Text = board.Total;
+            _earn.Text = board.Earn;
+            _invoiceDiscountButton.Enabled = board.CanDiscountInvoice;
 
-            _cash.Checked = _cart.PaymentMethod == PaymentMethod.Cash;
-            _transfer.Checked = _cart.PaymentMethod == PaymentMethod.BankTransfer;
-            _card.Checked = _cart.PaymentMethod == PaymentMethod.Card;
+            _cash.Checked = board.Method == PaymentMethod.Cash;
+            _transfer.Checked = board.Method == PaymentMethod.BankTransfer;
+            _card.Checked = board.Method == PaymentMethod.Card;
 
-            var isCash = _cart.PaymentMethod == PaymentMethod.Cash;
-            _tendered.Visible = isCash;
-            _quickCash.Visible = isCash;
-            _reference.Visible = !isCash;
-            if (_cart.CashTendered is null && _tendered.ValueOrZero != 0 && !_tendered.ContainsFocus)
+            _tendered.Visible = board.IsCash;
+            _quickCash.Visible = board.IsCash;
+            _reference.Visible = !board.IsCash;
+            if (!_tendered.ContainsFocus && _tendered.ValueOrZero != (board.CashTendered ?? 0))
             {
-                _tendered.Value = 0;
+                _tendered.Value = board.CashTendered ?? 0;
             }
 
-            if (_cart.PaymentReference is null && _reference.Text.Length > 0)
+            if (board.PaymentReference is null && _reference.Text.Length > 0)
             {
                 _reference.Clear();
             }
 
-            RenderQuickCash();
+            RenderQuickCash(board.QuickCash);
 
-            _change.Text = Vnd.Format(_cart.Change);
-            _blocker.Text = ShiftMissing
-                ? "Chưa mở ca bán hàng."
-                : _cart.IsEmpty ? string.Empty : _cart.CheckoutBlocker ?? string.Empty;
-            _pay.Enabled = !_busy && _cart.CanCheckout && !ShiftMissing;
+            _change.Text = board.Change;
+            _blocker.Text = board.Blocker;
+            _pay.Enabled = board.CanPay;
         }
         finally
         {
@@ -1193,14 +519,15 @@ internal sealed class PosScreen : UserControl
         }
     }
 
-    private void RenderQuickCash()
+    private void RenderQuickCash(IReadOnlyList<decimal> amounts)
     {
-        if (_cart.Total == _quickCashTotal)
+        var key = string.Join("|", amounts);
+        if (key == _quickCashKey)
         {
             return;
         }
 
-        _quickCashTotal = _cart.Total;
+        _quickCashKey = key;
         _quickCash.SuspendLayout();
         foreach (Control control in _quickCash.Controls)
         {
@@ -1208,7 +535,7 @@ internal sealed class PosScreen : UserControl
         }
 
         _quickCash.Controls.Clear();
-        foreach (var amount in _cart.SuggestCashAmounts())
+        foreach (var amount in amounts)
         {
             var button = new ModernButton
             {
@@ -1217,11 +544,7 @@ internal sealed class PosScreen : UserControl
                 Size = new Size(116, 34),
                 Margin = new Padding(0, 0, 6, 6),
             };
-            button.Click += (_, _) =>
-            {
-                _tendered.Value = amount;
-                _pay.Focus();
-            };
+            button.Click += (_, _) => _presenter.QuickCash(amount);
             _quickCash.Controls.Add(button);
         }
 
@@ -1229,42 +552,149 @@ internal sealed class PosScreen : UserControl
         _quickCash.ResumeLayout(true);
     }
 
-    // ---- Helpers -----------------------------------------------------------------------------------
+    void IPosView.SelectLine(PosCartLine line) => _grid.SelectItem(line);
 
-    /// <summary>Runs a cart change, turning domain rule violations into the status line instead of exceptions.</summary>
-    private bool TryCart(Action action)
+    void IPosView.ShowShift(PosShiftBar bar)
     {
-        try
-        {
-            action();
-            return true;
-        }
-        catch (DomainException ex)
-        {
-            ShowStatus(ex.Message, LabelTone.Danger);
-            return false;
-        }
+        _shiftInfo.Text = bar.Text;
+        _shiftInfo.Tone = bar.Tone.ToLabelTone();
+        _openShift.Visible = bar.ShowOpenButton;
     }
 
-    private void ShowStatus(string text, LabelTone tone)
+    void IPosView.ShowStatus(string text, Tone tone)
     {
         _status.Text = text;
-        _status.Tone = tone;
+        _status.Tone = tone.ToLabelTone();
     }
 
-    private void FocusScan()
+    void IPosView.ShowParkedCount(int count)
     {
-        if (!IsDisposed)
+        _parked.Text = PosTexts.ParkedCaption(count);
+        _parked.Variant = count > 0 ? ButtonVariant.Primary : ButtonVariant.Secondary;
+    }
+
+    void IPosView.SetPhone(string text)
+    {
+        if (_phone.Text != text)
+        {
+            _phone.Text = text;
+        }
+    }
+
+    void IPosView.ShowPhoneError(string? message)
+    {
+        if (message is null)
+        {
+            _phone.ClearValidation();
+        }
+        else
+        {
+            _phone.SetError(message);
+        }
+    }
+
+    void IPosView.RestoreScan(string text)
+    {
+        if (_scan.Text.Length == 0)
+        {
+            _scan.Text = text;
+        }
+
+        _scan.SelectAll();
+    }
+
+    void IPosView.ClearScan() => _scan.Clear();
+
+    void IPosView.FocusScan()
+    {
+        if (IsAlive)
         {
             _scan.Focus();
             _scan.SelectAll();
         }
     }
 
-    private static string Minus(decimal amount) => amount == 0 ? "0 ₫" : "−" + Vnd.Format(amount);
+    void IPosView.FocusPay() => _pay.Focus();
 
-    private static string FormatDiscount(DiscountInput discount) =>
-        discount.Kind == DiscountKind.Percent ? $"{discount.Value.ToString("0.##", Vnd.Culture)}%" : Vnd.Format(discount.Value);
+    void IPosView.ShowCustomerDisplay(CustomerDisplayState state)
+    {
+        if (_display is { IsDisposed: false } display)
+        {
+            display.Render(state);
+        }
+    }
+
+    decimal? IPosView.AskQuantity(string name, string unit, decimal start)
+    {
+        using var dialog = new PosQuantityDialog(name, unit, start);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Quantity : null;
+    }
+
+    (bool Ok, DiscountInput? Discount) IPosView.AskDiscount(string title, decimal baseAmount, DiscountInput? current)
+    {
+        using var dialog = new PosDiscountDialog(title, baseAmount, current);
+        return dialog.ShowDialog(this) == DialogResult.OK ? (true, dialog.Discount) : (false, null);
+    }
+
+    PosProductDto? IPosView.SearchProduct(string term)
+    {
+        using var dialog = new PosProductSearchDialog(_scopeFactory, term);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.SelectedProduct : null;
+    }
+
+    PosProductDto? IPosView.PriceCheck()
+    {
+        using var dialog = new PriceCheckDialog(_scopeFactory, canAdd: true);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.SelectedProduct : null;
+    }
+
+    ShiftSummaryDto? IPosView.OpenShift(decimal suggestedFloat, string? cashierName)
+    {
+        using var dialog = new OpenShiftDialog(_scopeFactory, suggestedFloat, cashierName);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Opened : null;
+    }
+
+    (bool Ok, string? Label) IPosView.AskParkLabel(int lineCount, decimal total, string defaultLabel)
+    {
+        using var dialog = new ParkOrderDialog(lineCount, total, defaultLabel);
+        return dialog.ShowDialog(this) == DialogResult.OK ? (true, dialog.OrderLabel) : (false, null);
+    }
+
+    (Guid? Chosen, int Remaining) IPosView.PickParkedOrder(bool cartBusy)
+    {
+        using var dialog = new ParkedOrdersDialog(_scopeFactory, _clock, _presenter.Options.StoreUtcOffset, cartBusy);
+        var answer = dialog.ShowDialog(this);
+        return (answer == DialogResult.OK ? dialog.SelectedOrderId : null, dialog.RemainingCount);
+    }
+
+    string? IPosView.AskReprintCode(string? lastCode)
+    {
+        using var dialog = new ReprintDialog(lastCode);
+        return dialog.ShowDialog(this) == DialogResult.OK ? dialog.Code : null;
+    }
+
+    bool IPosView.ShowReceipt(ReceiptData receipt, int paperWidthMm)
+    {
+        using var preview = new ReceiptPreviewForm(receipt, paperWidthMm);
+        preview.ShowDialog(this);
+        return preview.Printed;
+    }
+
+    void IPosView.Beep() => System.Media.SystemSounds.Beep.Play();
+
+    void IView.ShowWarning(string message, string title) => ShowWarning(message, title);
+
+    void IView.ShowInfo(string message, string title) => ShowInfo(message, title);
+
+    bool IView.Confirm(string message, string title, string confirmText, bool danger) =>
+        Confirm(message, title, confirmText, cancelText: "Tiếp tục bán", danger: danger);
+
+    void IView.ToastSuccess(string message, string? title) => ToastSuccess(message, title);
+
+    void IView.ToastError(string message, string? title) => ToastError(message, title);
+
+
+    // ---- Helpers -----------------------------------------------------------------------------------
 
     private static ModernButton ToolbarButton(string text, string? glyph, EventHandler onClick)
     {

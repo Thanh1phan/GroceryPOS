@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddTransient<DashboardPresenter>();
         services.AddTransient<ReportsPresenter>();
         services.AddTransient<ReturnPresenter>();
+        services.AddTransient<PosPresenter>();
         return services;
     }
 }

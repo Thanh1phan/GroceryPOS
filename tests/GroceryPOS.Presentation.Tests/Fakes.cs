@@ -10,6 +10,7 @@ using GroceryPOS.Application.Purchasing;
 using GroceryPOS.Application.Reports;
 using GroceryPOS.Application.Reports.Export;
 using GroceryPOS.Application.Sales;
+using GroceryPOS.Application.Sales.Receipts;
 using GroceryPOS.Application.Settings;
 using GroceryPOS.Application.Shifts;
 using GroceryPOS.Application.Users;
@@ -254,6 +255,15 @@ internal sealed class TestHost : IDisposable
         services.AddScoped<IReportExportService>(sp => sp.GetRequiredService<FakeReportExportService>());
         services.AddSingleton(Returns);
         services.AddScoped<IReturnService>(sp => sp.GetRequiredService<FakeReturnService>());
+        services.AddSingleton(PosLookup);
+        services.AddScoped<IPosLookupService>(sp => sp.GetRequiredService<FakePosLookupService>());
+        services.AddSingleton(Checkout);
+        services.AddScoped<ICheckoutService>(sp => sp.GetRequiredService<FakeCheckoutService>());
+        services.AddSingleton(SaleReceipts);
+        services.AddScoped<IReceiptService>(sp => sp.GetRequiredService<FakeReceiptService>());
+        services.AddSingleton(ParkedOrders);
+        services.AddScoped<IParkedOrderService>(sp => sp.GetRequiredService<FakeParkedOrderService>());
+        services.AddScoped(_ => StoreProfile);
         services.AddScoped(_ => SalesOptions);
         services.AddSingleton<TimeProvider>(Clock);
         services.AddPresentation();
@@ -295,6 +305,16 @@ internal sealed class TestHost : IDisposable
     public FakeReportExportService ReportExports { get; } = new();
 
     public FakeReturnService Returns { get; } = new();
+
+    public FakePosLookupService PosLookup { get; } = new();
+
+    public FakeCheckoutService Checkout { get; } = new();
+
+    public FakeReceiptService SaleReceipts { get; } = new();
+
+    public FakeParkedOrderService ParkedOrders { get; } = new();
+
+    public GroceryPOS.Application.Common.StoreProfile StoreProfile { get; set; } = GroceryPOS.Application.Common.StoreProfile.Default;
 
     /// <summary>Read per scope (like the settings-backed options of the app), so tests can change it between actions.</summary>
     public SalesOptions SalesOptions { get; set; } = SalesOptions.Default;
